@@ -11,11 +11,8 @@
 
   "permissions": [
     "activeTab",
-    "storage"
-  ],
-
-  "host_permissions": [
-    "<all_urls>"
+    "storage",
+    "scripting"
   ],
 
   "action": {
@@ -34,12 +31,6 @@
     "scripts": ["background.js"]
   },
 
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-  }],
-
   "options_ui": {
     "page": "options/options.html"
   },
@@ -47,8 +38,12 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "pagescope@internetuniverse.org",
-      "strict_min_version": "109.0"
+      "strict_min_version": "140.0"
     }
+  },
+
+  "data_collection_permissions": {
+    "required": false
   },
 
   "developer": {

@@ -128,11 +128,24 @@ class SidebarUI {
         return;
       }
       
-      console.log('[PageScope] Sending extract message...');
-      
+      console.log('[PageScope] Injecting content script...');
+
+      // Inject content script dynamically (MV3 with activeTab only)
+      try {
+        await browser.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        });
+        console.log('[PageScope] Content script injected successfully');
+      } catch (e) {
+        // Script might already be injected, that's okay
+        console.log('[PageScope] Content script injection note:', e.message);
+      }
+
       // Small delay to ensure content script is ready
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
+      console.log('[PageScope] Sending extract message...');
       this.data = await browser.tabs.sendMessage(tab.id, {
         action: 'extract'
       });

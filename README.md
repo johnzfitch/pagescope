@@ -44,11 +44,16 @@ cd pagescope
 ## ![lock](.github/assets/icons/lock.png) Permissions Explained
 
 ### Required Permissions
-- **activeTab**: Reads page content when you click the extension icon
-- **tabs**: Access tab information to analyze the correct page
-- **storage**: Saves your preferences locally (no cloud sync)
+- **activeTab**: Only accesses the page you're currently viewing, and only when you click the extension icon
+- **storage**: Saves your preferences locally in your browser (no cloud sync)
+- **scripting**: Allows the extension to inject the analysis script into the active tab when you activate it
 
-All permissions are used exclusively for local page analysis. No data leaves your browser.
+### What We DON'T Ask For
+- ❌ **No "access all websites" permission** - We only access pages when you explicitly click the icon
+- ❌ **No background access** - Extension is completely inactive until you use it
+- ❌ **No browsing history** - We never track or access your browsing activity
+
+**Privacy-First Design:** The content script is injected on-demand only when you activate the extension, not automatically on every page you visit.
 
 ## Use Cases
 
