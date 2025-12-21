@@ -4,6 +4,13 @@
  */
 
 // Listen for toolbar button clicks (MV3: action API)
-browser.action.onClicked.addListener(() => {
-  browser.sidebarAction.open();
+// Toggle sidebar - open if closed, close if open
+browser.action.onClicked.addListener(async () => {
+  const isOpen = await browser.sidebarAction.isOpen({});
+
+  if (isOpen) {
+    browser.sidebarAction.close();
+  } else {
+    browser.sidebarAction.open();
+  }
 });
