@@ -70,10 +70,10 @@ cd pagescope
 ### Distribution Package
 ```bash
 npm install -g web-ext
-web-ext build --ignore-files "*.har" --ignore-files "*.log" --ignore-files "*.txt" --ignore-files "*.png"
+web-ext build
 ```
 
-Creates a clean `.xpi` package in `web-ext-artifacts/` (approx. 23KB).
+Creates a `.xpi` package in `web-ext-artifacts/` (approx. 24KB).
 
 ## Project Structure
 
