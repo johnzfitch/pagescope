@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>PageScope</h1>
+      <div class="header-buttons">
+        <button id="refresh" class="refresh-btn state-load">⬇️ Load</button>
+        <button id="clear" class="clear-btn" title="Clear data">✕</button>
+      </div>
+    </header>
+
+    <div id="stale-data-warning" class="stale-warning" style="display:none;">
+      <div class="stale-content">
+        <span class="stale-icon">⚠️</span>
+        <span class="stale-text">
+          Viewing data from: <span class="stale-url"></span>
+        </span>
+      </div>
+      <button id="update-now" class="stale-update-btn">Update Now</button>
+    </div>
+
+    <section class="tabs">
+      <button class="tab active" data-tab="structure">Structure</button>
+      <button class="tab" data-tab="interactive">Interactive</button>
+      <button class="tab" data-tab="accessibility">Accessibility</button>
+    </section>
+    
+    <div class="content">
+      <div id="structure-tab" class="tab-content active"></div>
+      
+      <div id="interactive-tab" class="tab-content">
+        <div class="filter">
+          <label>
+            <input type="checkbox" id="viewport-only" checked>
+            Viewport only
+          </label>
+          <button id="highlight-all">Highlight All</button>
+        </div>
+        <div id="interactive-list"></div>
+      </div>
+      
+      <div id="accessibility-tab" class="tab-content">
+        <div id="a11y-stats"></div>
+        <div id="a11y-issues"></div>
+      </div>
+    </div>
+    
+    <footer>
+      <button id="export-json">Export JSON</button>
+      <button id="export-md">Export Markdown</button>
+      <button id="export-text">Export Text</button>
+    </footer>
+  </div>
+  
+  <script src="sidebar.js"></script>
+</body>
+</html>
