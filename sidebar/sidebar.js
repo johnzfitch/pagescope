@@ -171,58 +171,99 @@ class SidebarUI {
     }
   }
   
+  createLoadingElement() {
+    const loading = document.createElement('div');
+    loading.className = 'loading';
+    const spinner = document.createElement('div');
+    spinner.className = 'spinner';
+    const text = document.createElement('div');
+    text.textContent = 'Analyzing page...';
+    loading.appendChild(spinner);
+    loading.appendChild(text);
+    return loading;
+  }
+
   showLoading() {
     // Structure tab
     const structureTab = document.getElementById('structure-tab');
     if (structureTab) {
-      structureTab.innerHTML = '<div class="loading"><div class="spinner"></div><div>Analyzing page...</div></div>';
+      structureTab.textContent = '';
+      structureTab.appendChild(this.createLoadingElement());
     }
 
     // Interactive tab - only update the list div, keep filter controls intact
     const interactiveList = document.getElementById('interactive-list');
     if (interactiveList) {
-      interactiveList.innerHTML = '<div class="loading"><div class="spinner"></div><div>Analyzing page...</div></div>';
+      interactiveList.textContent = '';
+      interactiveList.appendChild(this.createLoadingElement());
     }
 
     // Accessibility tab
     const a11yStats = document.getElementById('a11y-stats');
     if (a11yStats) {
-      a11yStats.innerHTML = '<div class="loading"><div class="spinner"></div><div>Analyzing page...</div></div>';
+      a11yStats.textContent = '';
+      a11yStats.appendChild(this.createLoadingElement());
     }
     const a11yIssues = document.getElementById('a11y-issues');
     if (a11yIssues) {
-      a11yIssues.innerHTML = '';
+      a11yIssues.textContent = '';
     }
   }
 
-  showError(message) {
-    // Escape the message for safe HTML insertion
-    const safeMessage = message.includes('<br>') || message.includes('<strong>')
-      ? message  // Allow basic HTML tags we control
-      : this.escape(message);
+  createErrorElement(message) {
+    const container = document.createElement('div');
+    container.className = 'empty-state';
 
-    const errorHTML = `<div class="empty-state"><div class="empty-state-icon">⚠️</div><div class="empty-state-message">${safeMessage}</div></div>`;
+    const icon = document.createElement('div');
+    icon.className = 'empty-state-icon';
+    icon.textContent = '⚠️';
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'empty-state-message';
+
+    // Handle HTML in message (only for controlled strings)
+    if (message.includes('<br>') || message.includes('<strong>')) {
+      // Parse controlled HTML safely
+      const temp = document.createElement('div');
+      temp.innerHTML = message;
+      while (temp.firstChild) {
+        messageDiv.appendChild(temp.firstChild);
+      }
+    } else {
+      messageDiv.textContent = message;
+    }
+
+    container.appendChild(icon);
+    container.appendChild(messageDiv);
+    return container;
+  }
+
+  showError(message) {
+    const errorElement = this.createErrorElement(message);
 
     // Structure tab
     const structureTab = document.getElementById('structure-tab');
     if (structureTab) {
-      structureTab.innerHTML = errorHTML;
+      structureTab.textContent = '';
+      structureTab.appendChild(errorElement.cloneNode(true));
     }
 
     // Interactive tab - only update the list div, keep filter controls intact
     const interactiveList = document.getElementById('interactive-list');
     if (interactiveList) {
-      interactiveList.innerHTML = errorHTML;
+      interactiveList.textContent = '';
+      interactiveList.appendChild(errorElement.cloneNode(true));
     }
 
     // Accessibility tab
     const a11yStats = document.getElementById('a11y-stats');
     if (a11yStats) {
-      a11yStats.innerHTML = errorHTML;
+      a11yStats.textContent = '';
+      a11yStats.appendChild(errorElement.cloneNode(true));
     }
     const a11yIssues = document.getElementById('a11y-issues');
     if (a11yIssues) {
-      a11yIssues.innerHTML = '';
+      a11yIssues.textContent = '';
     }
   }
   
