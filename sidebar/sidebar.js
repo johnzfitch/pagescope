@@ -954,194 +954,288 @@ class SidebarUI {
       return;
     }
 
-    if (!this.data.brailleMap) {
-      alert('Braille map not available. Please refresh the page analysis.');
-      return;
-    }
-
-    const braille = this.data.brailleMap;
     let text = '';
 
-    // Header
-    text += '═'.repeat(80) + '\n';
-    text += '             PAGESCOPE TACTILE PAGE MAP\n';
-    text += '═'.repeat(80) + '\n\n';
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 1: AGENT BRIEF (Quick Orientation)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    text += '╔' + '═'.repeat(78) + '╗\n';
+    text += '║' + '                         PAGESCOPE AGENT BRIEF'.padEnd(78) + '║\n';
+    text += '╚' + '═'.repeat(78) + '╝\n\n';
 
-    // Page info
-    text += `Page: ${this.cleanText(this.data.meta.title)}\n`;
-    text += `URL: ${this.data.meta.url}\n`;
-    text += `Exported: ${new Date().toISOString()}\n\n`;
+    if (this.data.agentBrief) {
+      const brief = this.data.agentBrief;
 
-    // Legend
-    text += braille.legend + '\n\n';
+      // Page classification
+      const typeStr = brief.pageSubType
+        ? `${brief.pageType} (${brief.pageSubType})`
+        : brief.pageType;
+      text += `PAGE TYPE: ${typeStr} [confidence: ${Math.round(brief.confidence * 100)}%]\n`;
+      text += `SITE: ${brief.site}\n`;
+      text += `URL: ${brief.url}\n\n`;
 
-    // The Braille grid
-    text += '═'.repeat(80) + '\n';
-    text += '                    SPATIAL MAP (80x50 Braille)\n';
-    text += '═'.repeat(80) + '\n\n';
-    text += braille.grid + '\n\n';
+      // Primary content
+      if (brief.primaryContent) {
+        text += 'PRIMARY CONTENT:\n';
+        if (brief.primaryContent.title) {
+          text += `  Title: "${this.cleanText(brief.primaryContent.title).slice(0, 60)}"\n`;
+        }
+        if (brief.primaryContent.author) {
+          text += `  Author: ${brief.primaryContent.author}\n`;
+        }
+        if (brief.primaryContent.source) {
+          text += `  Source: ${brief.primaryContent.source}\n`;
+        }
+        if (brief.primaryContent.timestamp) {
+          text += `  Posted: ${brief.primaryContent.timestamp}\n`;
+        }
+        text += '\n';
+      }
 
-    // Zone details if available
-    if (braille.zones && braille.zones.length > 0) {
-      text += '═'.repeat(80) + '\n';
-      text += '                    DETECTED ZONES\n';
-      text += '═'.repeat(80) + '\n\n';
+      // Engagement metrics
+      if (brief.engagement) {
+        const engParts = [];
+        if (brief.engagement.votes) engParts.push(`${brief.engagement.votes} votes`);
+        if (brief.engagement.comments) engParts.push(`${brief.engagement.comments} comments`);
+        if (engParts.length > 0) {
+          text += `ENGAGEMENT: ${engParts.join(' | ')}\n\n`;
+        }
+      }
 
-      braille.zones.forEach((zone, idx) => {
-        const label = this.cleanText(zone.label) || '(unlabeled)';
-        text += `[${idx + 1}] ${zone.type.toUpperCase()}: ${label}\n`;
-        text += `    Position: (${zone.bounds.x}, ${zone.bounds.y}) Size: ${zone.bounds.w}x${zone.bounds.h}\n\n`;
-      });
-    }
-
-    // Semantic structure section
-    if (this.data.semanticStructure) {
-      const sem = this.data.semanticStructure;
-
-      // Document outline - heading hierarchy
-      if (sem.documentOutline && sem.documentOutline.length > 0) {
-        text += '═'.repeat(80) + '\n';
-        text += '                    DOCUMENT OUTLINE\n';
-        text += '═'.repeat(80) + '\n\n';
-
-        sem.documentOutline.forEach(h => {
-          const prefix = '│ '.repeat(h.level - 1) + '├─';
-          text += `${prefix} H${h.level}: ${this.cleanText(h.text)}\n`;
+      // Available actions
+      if (brief.availableActions && brief.availableActions.length > 0) {
+        text += 'AVAILABLE ACTIONS:\n';
+        brief.availableActions.forEach(action => {
+          let actionDesc = `  ✓ ${action.action}`;
+          if (action.type) actionDesc += ` (${action.type})`;
+          if (action.supports) actionDesc += ` [supports: ${action.supports.join(', ')}]`;
+          if (action.authenticated) actionDesc += ' *requires auth*';
+          if (action.destinations) actionDesc += ` → ${action.destinations} destinations`;
+          text += actionDesc + '\n';
         });
         text += '\n';
       }
 
-      // Landmark regions with accessible names
-      if (sem.landmarks && sem.landmarks.length > 0) {
-        text += '═'.repeat(80) + '\n';
-        text += '                    LANDMARK REGIONS\n';
-        text += '═'.repeat(80) + '\n\n';
-
-        const landmarksByRole = {};
-        sem.landmarks.forEach(l => {
-          if (!landmarksByRole[l.role]) landmarksByRole[l.role] = [];
-          landmarksByRole[l.role].push(l);
-        });
-
-        for (const [role, landmarks] of Object.entries(landmarksByRole)) {
-          text += `[${role.toUpperCase()}]\n`;
-          landmarks.forEach(l => {
-            const labelInfo = l.hasAriaLabel ? ' (aria-label)' : '';
-            const childInfo = l.childLandmarks > 0 ? ` [contains ${l.childLandmarks} sub-landmarks]` : '';
-            text += `  • ${l.name}${labelInfo}${childInfo}\n`;
-          });
-          text += '\n';
+      // Key elements summary
+      if (brief.keyElements) {
+        const elements = [];
+        if (brief.keyElements.hasComments) elements.push('comments');
+        if (brief.keyElements.hasForm) elements.push('forms');
+        if (brief.keyElements.hasMedia) elements.push('media');
+        if (brief.keyElements.hasImages) elements.push(`${brief.keyElements.hasImages} images`);
+        if (elements.length > 0) {
+          text += `KEY ELEMENTS: ${elements.join(', ')}\n\n`;
         }
       }
+    }
 
-      // Form structure
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 2: PAGE ANATOMY (Hierarchical Structure)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    text += '═'.repeat(80) + '\n';
+    text += '                         PAGE ANATOMY\n';
+    text += '═'.repeat(80) + '\n\n';
+
+    if (this.data.pageAnatomy) {
+      const renderTree = (node, prefix = '', isLast = true) => {
+        if (!node) return '';
+        let result = '';
+
+        const connector = isLast ? '└─' : '├─';
+        const typeMarker = node.type.match(/^[A-Z]/) ? `[${node.type}]` : `[${node.type}]`;
+        const spatialHint = node.spatial ? ` (${node.spatial})` : '';
+
+        // Format label
+        let labelStr = '';
+        if (node.label) {
+          labelStr = ` "${this.cleanText(node.label).slice(0, 40)}"`;
+        }
+
+        // Interactive info
+        let interactiveStr = '';
+        if (node.interactive) {
+          if (node.interactive.type === 'button') {
+            interactiveStr = ` → ${node.interactive.action || 'click'}`;
+          } else if (node.interactive.type === 'link') {
+            interactiveStr = ` → ${node.interactive.destination?.slice(0, 30) || 'navigate'}`;
+          } else if (node.interactive.type === 'form') {
+            interactiveStr = ` [${node.interactive.fieldCount} fields]`;
+          }
+        }
+
+        result += `${prefix}${connector} ${typeMarker}${labelStr}${spatialHint}${interactiveStr}\n`;
+
+        if (node.children && node.children.length > 0) {
+          const childPrefix = prefix + (isLast ? '   ' : '│  ');
+          node.children.forEach((child, idx) => {
+            result += renderTree(child, childPrefix, idx === node.children.length - 1);
+          });
+        }
+
+        return result;
+      };
+
+      // Render children of the page root
+      if (this.data.pageAnatomy.children) {
+        this.data.pageAnatomy.children.forEach((child, idx) => {
+          text += renderTree(child, '', idx === this.data.pageAnatomy.children.length - 1);
+        });
+      }
+      text += '\n';
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 3: ATTRIBUTED CONTENT (Comments/Posts with Context)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    if (this.data.attributedContent && this.data.attributedContent.length > 0) {
+      text += '═'.repeat(80) + '\n';
+      text += '                         CONTENT EXTRACTION\n';
+      text += '═'.repeat(80) + '\n\n';
+
+      // Article first
+      const articles = this.data.attributedContent.filter(c => c.type === 'article');
+      const comments = this.data.attributedContent.filter(c => c.type === 'comment');
+
+      articles.forEach(article => {
+        text += `[ARTICLE]\n`;
+        if (article.title) text += `  Title: ${this.cleanText(article.title)}\n`;
+        if (article.source) text += `  Source: ${article.source}\n`;
+        if (article.summary) {
+          text += `  Summary: ${this.cleanText(article.summary).slice(0, 200)}...\n`;
+        }
+        text += '\n';
+      });
+
+      if (comments.length > 0) {
+        text += `[COMMENTS] (${comments.length} total)\n\n`;
+
+        comments.forEach((comment, idx) => {
+          // Header line
+          let header = `  ${idx + 1}. `;
+          if (comment.author) header += `${comment.author}`;
+          if (comment.timestamp) header += ` • ${comment.timestamp}`;
+          if (comment.engagement?.votes) header += ` • ${comment.engagement.votes} votes`;
+          text += header + '\n';
+
+          // Content
+          if (comment.text) {
+            const wrapped = this.wrapText(this.cleanText(comment.text), 70, '     ');
+            text += wrapped + '\n';
+          }
+
+          // Links
+          if (comment.links && comment.links.length > 0) {
+            comment.links.forEach(link => {
+              text += `     [link] ${link.url.slice(0, 60)}\n`;
+            });
+          }
+
+          // Actions
+          if (comment.actions && comment.actions.length > 0) {
+            text += `     → can: ${comment.actions.join(', ')}\n`;
+          }
+
+          text += '\n';
+        });
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 4: ASCII BOUNDARY MAP (Visual Layout)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    if (this.data.asciiMap) {
+      text += '═'.repeat(80) + '\n';
+      text += '                         SPATIAL MAP (ASCII)\n';
+      text += '═'.repeat(80) + '\n\n';
+      text += this.data.asciiMap.map + '\n\n';
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 5: BRAILLE TACTILE MAP (Ambient)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    if (this.data.brailleMap) {
+      text += '═'.repeat(80) + '\n';
+      text += '                         TACTILE MAP (Braille - Ambient)\n';
+      text += '═'.repeat(80) + '\n\n';
+
+      text += 'LEGEND:\n';
+      text += '  ⣿ HEADER  ⣶ NAV  ⣤ MAIN  ⣴ ASIDE  ⣀ FOOTER\n';
+      text += '  ⠿ button  ⠗ link  ⠶ input  ⠻ image  ⠛ heading\n\n';
+
+      text += this.data.brailleMap.grid + '\n\n';
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 6: SEMANTIC STRUCTURE (Accessibility Tree)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    if (this.data.semanticStructure) {
+      const sem = this.data.semanticStructure;
+
+      // Document outline
+      if (sem.documentOutline && sem.documentOutline.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                         DOCUMENT OUTLINE\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        sem.documentOutline.forEach(h => {
+          const indent = '  '.repeat(h.level - 1);
+          text += `${indent}H${h.level}: ${this.cleanText(h.text).slice(0, 60)}\n`;
+        });
+        text += '\n';
+      }
+
+      // Landmarks
+      if (sem.landmarks && sem.landmarks.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                         LANDMARK REGIONS\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        const byRole = {};
+        sem.landmarks.forEach(l => {
+          if (!byRole[l.role]) byRole[l.role] = [];
+          byRole[l.role].push(l);
+        });
+
+        for (const [role, items] of Object.entries(byRole)) {
+          text += `[${role.toUpperCase()}]\n`;
+          items.forEach(l => {
+            text += `  • ${l.name}${l.hasAriaLabel ? ' (labeled)' : ''}\n`;
+          });
+        }
+        text += '\n';
+      }
+
+      // Forms
       if (sem.forms && sem.forms.length > 0) {
         text += '═'.repeat(80) + '\n';
-        text += '                    FORM STRUCTURE\n';
+        text += '                         FORM STRUCTURE\n';
         text += '═'.repeat(80) + '\n\n';
 
         sem.forms.forEach((form, idx) => {
           text += `Form ${idx + 1}: ${this.cleanText(form.name)}\n`;
-          if (form.action) text += `  Action: ${form.action} (${form.method.toUpperCase()})\n`;
-          text += `  Fields:\n`;
-
-          form.fields.forEach(field => {
+          form.fields.forEach(f => {
             const states = [];
-            if (field.required) states.push('required');
-            if (field.disabled) states.push('disabled');
-            if (field.invalid) states.push('invalid');
-            const stateStr = states.length ? ` [${states.join(', ')}]` : '';
-
-            text += `    • [${field.type}] ${field.label || '(unlabeled)'}${stateStr}\n`;
-            if (field.describedBy) {
-              text += `      Description: ${this.cleanText(field.describedBy).slice(0, 60)}\n`;
-            }
+            if (f.required) states.push('required');
+            if (f.disabled) states.push('disabled');
+            text += `  • [${f.type}] ${f.label || '(unlabeled)'}${states.length ? ' [' + states.join(',') + ']' : ''}\n`;
           });
           text += '\n';
         });
       }
 
-      // Interactive elements with ARIA states
-      const elementsWithStates = sem.interactiveElements?.filter(el =>
-        Object.keys(el.states).length > 0
-      ) || [];
-
-      if (elementsWithStates.length > 0) {
+      // Interactive with states
+      const withStates = sem.interactiveElements?.filter(e => Object.keys(e.states).length > 0) || [];
+      if (withStates.length > 0) {
         text += '═'.repeat(80) + '\n';
-        text += '                    INTERACTIVE ELEMENTS (WITH STATES)\n';
+        text += '                         INTERACTIVE STATES\n';
         text += '═'.repeat(80) + '\n\n';
 
-        elementsWithStates.slice(0, 30).forEach(el => {
-          const stateStrs = Object.entries(el.states).map(([k, v]) => {
-            if (typeof v === 'object') return `${k}=${JSON.stringify(v)}`;
-            return v === true ? k : `${k}=${v}`;
-          });
-
-          text += `• [${el.role}] ${this.cleanText(el.name)}\n`;
-          if (stateStrs.length) {
-            text += `  States: ${stateStrs.join(', ')}\n`;
-          }
-          if (el.describedBy) {
-            text += `  Described by: ${this.cleanText(el.describedBy).slice(0, 50)}\n`;
-          }
-        });
-        text += '\n';
-      }
-
-      // Lists
-      if (sem.lists && sem.lists.length > 0) {
-        text += '═'.repeat(80) + '\n';
-        text += '                    LIST STRUCTURE\n';
-        text += '═'.repeat(80) + '\n\n';
-
-        sem.lists.forEach((list, idx) => {
-          const nestedLabel = list.nested ? ' (contains nested lists)' : '';
-          text += `List ${idx + 1}: ${list.type.toUpperCase()}${nestedLabel}\n`;
-          if (list.label) text += `  Label: ${this.cleanText(list.label)}\n`;
-          text += `  Items: ${list.itemCount}\n`;
-
-          if (list.items && list.items.length > 0) {
-            list.items.slice(0, 5).forEach((item, i) => {
-              const linkMarker = item.hasLink ? ' →' : '';
-              text += `    ${i + 1}. ${this.cleanText(item.text)}${linkMarker}\n`;
-            });
-            if (list.itemCount > 5) {
-              text += `    ... and ${list.itemCount - 5} more items\n`;
-            }
-          }
-          text += '\n';
-        });
-      }
-
-      // Tables
-      if (sem.tables && sem.tables.length > 0) {
-        text += '═'.repeat(80) + '\n';
-        text += '                    TABLE STRUCTURE\n';
-        text += '═'.repeat(80) + '\n\n';
-
-        sem.tables.forEach((table, idx) => {
-          text += `Table ${idx + 1}: ${table.caption || '(no caption)'}\n`;
-          text += `  Rows: ${table.rowCount}, Headers: ${table.headerCount}\n`;
-          if (table.headers.length > 0) {
-            text += `  Column headers: ${table.headers.join(' | ')}\n`;
-          }
-          text += `  Properly scoped: ${table.hasScope ? 'Yes' : 'No'}\n\n`;
-        });
-      }
-
-      // Live regions
-      if (sem.liveRegions && sem.liveRegions.length > 0) {
-        text += '═'.repeat(80) + '\n';
-        text += '                    LIVE REGIONS (DYNAMIC CONTENT)\n';
-        text += '═'.repeat(80) + '\n\n';
-
-        sem.liveRegions.forEach(region => {
-          text += `• [${region.role}] aria-live="${region.ariaLive}"`;
-          if (region.ariaAtomic) text += ' (atomic)';
-          text += '\n';
-          if (region.text) {
-            text += `  Current content: ${this.cleanText(region.text)}\n`;
-          }
+        withStates.slice(0, 20).forEach(el => {
+          const stateStr = Object.entries(el.states)
+            .map(([k, v]) => v === true ? k : `${k}=${v}`)
+            .join(', ');
+          text += `• [${el.role}] ${this.cleanText(el.name).slice(0, 40)}\n`;
+          text += `  States: ${stateStr}\n`;
         });
         text += '\n';
       }
@@ -1149,77 +1243,76 @@ class SidebarUI {
       // ARIA relationships
       if (sem.relationships && sem.relationships.length > 0) {
         text += '═'.repeat(80) + '\n';
-        text += '                    ARIA RELATIONSHIPS\n';
+        text += '                         ARIA RELATIONSHIPS\n';
         text += '═'.repeat(80) + '\n\n';
 
-        sem.relationships.forEach(rel => {
-          text += `• [${rel.source.role}] ${rel.source.name || '(unnamed)'}\n`;
+        sem.relationships.slice(0, 15).forEach(rel => {
+          text += `• [${rel.source.role}] ${rel.source.name || '?'}\n`;
           for (const [attr, targets] of Object.entries(rel.relationships)) {
-            const targetList = targets.map(t =>
-              t.exists ? `${t.id} [${t.role}]` : `${t.id} (MISSING!)`
-            ).join(', ');
-            text += `  ${attr}: ${targetList}\n`;
+            text += `  ${attr}: ${targets.map(t => t.id).join(', ')}\n`;
           }
         });
         text += '\n';
       }
     }
 
-    // Text blocks (comments, posts) if available
-    if (this.data.textBlocks && this.data.textBlocks.length > 0) {
-      text += '═'.repeat(80) + '\n';
-      text += '                    TEXT CONTENT BLOCKS\n';
-      text += '═'.repeat(80) + '\n\n';
-
-      this.data.textBlocks.forEach((block, idx) => {
-        text += `--- Block ${idx + 1} (${block.wordCount} words) ---\n`;
-        // Wrap text at 78 chars
-        const words = block.text.split(/\s+/);
-        let line = '';
-        words.forEach(word => {
-          if (line.length + word.length + 1 > 78) {
-            text += line + '\n';
-            line = word;
-          } else {
-            line += (line ? ' ' : '') + word;
-          }
-        });
-        if (line) text += line + '\n';
-        text += '\n';
-      });
-    }
-
-    // Screen reader summary
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 7: MACHINE-READABLE (JSON)
+    // ═══════════════════════════════════════════════════════════════════════════════
     text += '═'.repeat(80) + '\n';
-    text += '                    SCREEN READER SUMMARY\n';
+    text += '                         MACHINE-READABLE (JSON)\n';
     text += '═'.repeat(80) + '\n\n';
 
-    text += `This page has:\n`;
-    text += `- ${this.data.structure.landmarks.length} landmarks (navigation regions)\n`;
-    text += `- ${this.data.structure.headings.length} headings\n`;
-    text += `- ${this.data.interactive.length} interactive elements\n`;
-    text += `- ${this.data.accessibility.issues.length} accessibility issues\n`;
+    const machineData = {
+      pageType: this.data.agentBrief?.pageType,
+      pageSubType: this.data.agentBrief?.pageSubType,
+      url: this.data.meta?.url,
+      title: this.data.meta?.title,
+      actions: this.data.agentBrief?.availableActions?.map(a => a.action) || [],
+      engagement: this.data.agentBrief?.engagement,
+      landmarks: this.data.structure?.landmarks?.length || 0,
+      headings: this.data.structure?.headings?.length || 0,
+      interactive: this.data.interactive?.length || 0,
+      comments: this.data.attributedContent?.filter(c => c.type === 'comment').length || 0,
+      issues: this.data.accessibility?.issues?.length || 0
+    };
 
-    if (this.data.textBlocks) {
-      text += `- ${this.data.textBlocks.length} text content blocks (comments, posts)\n`;
-    }
+    text += JSON.stringify(machineData, null, 2) + '\n\n';
 
-    text += '\n';
-    text += 'The Braille map above shows the spatial layout of the page.\n';
-    text += 'Different Braille patterns indicate different content types:\n';
-    text += '- Dense patterns (⣿⣶) = structural elements like headers and navigation\n';
-    text += '- Medium patterns (⠿⠗) = interactive elements like buttons and links\n';
-    text += '- Light patterns (⠤⠒) = text content and forms\n';
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // FOOTER
+    // ═══════════════════════════════════════════════════════════════════════════════
+    text += '─'.repeat(80) + '\n';
+    text += `Exported: ${new Date().toISOString()}\n`;
+    text += `PageScope v0.2.0 | Agent-Focused Export\n`;
 
     const blob = new Blob([text], { type: 'text/plain; charset=utf-8' });
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pagescope-braille-${this.getFilename()}.txt`;
+    a.download = `pagescope-agent-${this.getFilename()}.txt`;
     a.click();
 
     URL.revokeObjectURL(url);
+  }
+
+  wrapText(text, width, indent = '') {
+    const words = text.split(/\s+/);
+    let lines = [];
+    let line = indent;
+
+    words.forEach(word => {
+      if (line.length + word.length + 1 > width) {
+        lines.push(line);
+        line = indent + word;
+      } else {
+        line += (line.length > indent.length ? ' ' : '') + word;
+      }
+    });
+    if (line.length > indent.length) lines.push(line);
+
+    return lines.join('\n');
   }
 
   escapeMermaid(text) {

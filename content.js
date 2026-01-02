@@ -21,7 +21,12 @@ class PageScope {
       viewport: this.getViewportInfo(),
       textBlocks: this.getTextBlocks(),
       brailleMap: this.getBrailleMap(),
-      semanticStructure: this.getSemanticStructure()
+      semanticStructure: this.getSemanticStructure(),
+      // Agent-focused data
+      agentBrief: this.getAgentBrief(),
+      pageAnatomy: this.getPageAnatomy(),
+      attributedContent: this.getAttributedContent(),
+      asciiMap: this.getAsciiMap()
     };
   }
   
@@ -1020,6 +1025,712 @@ class PageScope {
   countChildLandmarks(el) {
     const landmarks = el.querySelectorAll('nav, main, aside, header, footer, [role="navigation"], [role="main"], [role="complementary"], [role="banner"], [role="contentinfo"], [role="search"]');
     return landmarks.length;
+  }
+
+  /**
+   * Classify the page type based on content patterns
+   */
+  getPageType() {
+    const url = window.location.href;
+    const title = document.title.toLowerCase();
+    const body = document.body;
+
+    // Detection signals
+    const signals = {
+      hasComments: !!document.querySelector('[class*="comment"], [data-testid*="comment"], #comments'),
+      hasArticle: !!document.querySelector('article, [role="article"]'),
+      hasProductPrice: !!document.querySelector('[class*="price"], [itemprop="price"]'),
+      hasCart: !!document.querySelector('[class*="cart"], [class*="basket"]'),
+      hasLoginForm: !!document.querySelector('input[type="password"]'),
+      hasSearchResults: !!document.querySelector('[class*="search-result"], [class*="results"]'),
+      hasVideoPlayer: !!document.querySelector('video, [class*="player"], iframe[src*="youtube"], iframe[src*="vimeo"]'),
+      hasFeed: !!document.querySelector('[class*="feed"], [class*="timeline"], [class*="stream"]'),
+      hasForm: document.querySelectorAll('form input:not([type="search"]):not([type="hidden"])').length > 2,
+      hasDashboard: !!document.querySelector('[class*="dashboard"], [class*="widget"]'),
+      hasDocumentation: !!document.querySelector('[class*="docs"], [class*="documentation"], .markdown-body'),
+      hasNavList: document.querySelectorAll('nav a').length > 5,
+      commentCount: document.querySelectorAll('[class*="comment"]').length,
+      formFieldCount: document.querySelectorAll('input, select, textarea').length,
+      linkCount: document.querySelectorAll('a[href]').length,
+      imageCount: document.querySelectorAll('img').length
+    };
+
+    // Page type classification
+    let pageType = 'generic';
+    let subType = null;
+    let confidence = 0.5;
+
+    // Social media post with comments
+    if (signals.hasArticle && signals.hasComments && signals.commentCount > 0) {
+      pageType = 'social-media-post';
+      subType = 'with-comments';
+      confidence = 0.85;
+    }
+    // E-commerce product
+    else if (signals.hasProductPrice && (signals.hasCart || signals.hasArticle)) {
+      pageType = 'e-commerce';
+      subType = 'product-page';
+      confidence = 0.8;
+    }
+    // Search results
+    else if (signals.hasSearchResults || url.includes('search') || url.includes('q=')) {
+      pageType = 'search-results';
+      confidence = 0.75;
+    }
+    // Video page
+    else if (signals.hasVideoPlayer) {
+      pageType = 'video';
+      subType = url.includes('youtube') ? 'youtube' : 'generic';
+      confidence = 0.8;
+    }
+    // Login/Auth
+    else if (signals.hasLoginForm && signals.formFieldCount < 5) {
+      pageType = 'authentication';
+      subType = 'login';
+      confidence = 0.85;
+    }
+    // Form/Application
+    else if (signals.hasForm && signals.formFieldCount > 3) {
+      pageType = 'form';
+      subType = signals.formFieldCount > 10 ? 'complex' : 'simple';
+      confidence = 0.7;
+    }
+    // Feed/Timeline
+    else if (signals.hasFeed) {
+      pageType = 'feed';
+      subType = 'social';
+      confidence = 0.75;
+    }
+    // Dashboard
+    else if (signals.hasDashboard) {
+      pageType = 'dashboard';
+      confidence = 0.7;
+    }
+    // Documentation
+    else if (signals.hasDocumentation || title.includes('doc')) {
+      pageType = 'documentation';
+      confidence = 0.75;
+    }
+    // Article/Blog
+    else if (signals.hasArticle && !signals.hasComments) {
+      pageType = 'article';
+      subType = 'blog-post';
+      confidence = 0.7;
+    }
+    // Landing/Homepage
+    else if (signals.hasNavList && signals.imageCount > 3 && url.match(/^https?:\/\/[^\/]+\/?$/)) {
+      pageType = 'landing-page';
+      confidence = 0.65;
+    }
+
+    return {
+      type: pageType,
+      subType,
+      confidence,
+      signals
+    };
+  }
+
+  /**
+   * Generate agent brief - quick orientation summary
+   */
+  getAgentBrief() {
+    const pageType = this.getPageType();
+    const meta = this.getMetadata();
+
+    // Extract primary content
+    const mainHeading = document.querySelector('h1')?.textContent?.trim();
+    const article = document.querySelector('article, [role="article"]');
+    const articleTitle = article?.querySelector('h1, h2, [class*="title"]')?.textContent?.trim();
+
+    // Count engagement elements
+    const comments = document.querySelectorAll('[class*="comment"]:not([class*="comment-form"]):not([class*="comment-input"])');
+    const votes = document.querySelector('[class*="vote"], [class*="digg"], [class*="like"], [class*="upvote"]');
+    const voteCount = votes?.textContent?.match(/\d+/)?.[0] || '0';
+
+    // Detect author
+    const authorEl = document.querySelector('[class*="author"], [rel="author"], [itemprop="author"], a[href*="/user/"], a[href*="/@"]');
+    const author = authorEl?.textContent?.trim()?.replace(/^by\s*/i, '');
+
+    // Detect source
+    const sourceEl = document.querySelector('[class*="source"], [itemprop="publisher"], cite');
+    const source = sourceEl?.textContent?.trim();
+
+    // Detect timestamp
+    const timeEl = document.querySelector('time, [datetime], [class*="timestamp"], [class*="date"]');
+    const timestamp = timeEl?.getAttribute('datetime') || timeEl?.textContent?.trim();
+
+    // Available actions detection
+    const actions = [];
+
+    // Vote actions
+    if (document.querySelector('[class*="vote"], [class*="digg"], [class*="like"], button[aria-label*="vote"]')) {
+      actions.push({ action: 'vote', type: 'upvote/downvote', authenticated: true });
+    }
+
+    // Comment action
+    if (document.querySelector('[class*="comment-form"], [class*="comment-input"], textarea[placeholder*="comment"]')) {
+      actions.push({ action: 'comment', supports: ['text', 'images', 'gifs'], authenticated: true });
+    }
+
+    // Share action
+    if (document.querySelector('[class*="share"], button[aria-label*="share"]')) {
+      actions.push({ action: 'share', type: 'link' });
+    }
+
+    // Save/Bookmark action
+    if (document.querySelector('[class*="save"], [class*="bookmark"], button[aria-label*="save"]')) {
+      actions.push({ action: 'save', authenticated: true });
+    }
+
+    // Search action
+    if (document.querySelector('input[type="search"], [role="search"], [class*="search"]')) {
+      actions.push({ action: 'search' });
+    }
+
+    // Navigation
+    const navLinks = document.querySelectorAll('nav a[href]');
+    if (navLinks.length > 0) {
+      actions.push({ action: 'navigate', destinations: navLinks.length });
+    }
+
+    // Form submission
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+      const formName = form.getAttribute('aria-label') || form.getAttribute('name') || 'form';
+      const submitBtn = form.querySelector('[type="submit"], button:not([type])');
+      if (submitBtn) {
+        actions.push({ action: 'submit', form: formName });
+      }
+    });
+
+    return {
+      pageType: pageType.type,
+      pageSubType: pageType.subType,
+      confidence: pageType.confidence,
+      site: window.location.hostname,
+      url: meta.url,
+      primaryContent: {
+        title: articleTitle || mainHeading || meta.title,
+        author,
+        source,
+        timestamp
+      },
+      engagement: {
+        votes: parseInt(voteCount) || 0,
+        comments: comments.length,
+        age: timestamp
+      },
+      availableActions: actions,
+      keyElements: {
+        hasComments: comments.length > 0,
+        hasForm: document.querySelectorAll('form').length > 0,
+        hasMedia: document.querySelectorAll('video, audio, iframe').length > 0,
+        hasImages: document.querySelectorAll('img').length
+      }
+    };
+  }
+
+  /**
+   * Build hierarchical page anatomy tree with spatial hints
+   */
+  getPageAnatomy() {
+    const viewW = window.innerWidth;
+    const viewH = window.innerHeight;
+
+    const buildNode = (el, depth = 0) => {
+      if (!el || !this.isVisible(el)) return null;
+      if (depth > 6) return null; // Limit depth
+
+      const rect = el.getBoundingClientRect();
+      const tag = el.tagName.toLowerCase();
+
+      // Determine semantic type
+      let semanticType = this.getSemanticType(el);
+      if (!semanticType && depth > 2) return null; // Skip non-semantic deep elements
+
+      // Get label/name
+      const label = this.getAccessibleName(el) || this.getElementLabel(el);
+
+      // Spatial description
+      const spatial = this.getSpatialDescription(rect, viewW, viewH);
+
+      // Interactive info
+      const interactive = this.getInteractiveInfo(el);
+
+      // Build children
+      const children = [];
+      const significantChildren = this.getSignificantChildren(el);
+
+      for (const child of significantChildren) {
+        const childNode = buildNode(child, depth + 1);
+        if (childNode) children.push(childNode);
+      }
+
+      return {
+        type: semanticType || tag,
+        tag,
+        label: label?.slice(0, 60),
+        spatial,
+        bounds: {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height)
+        },
+        interactive,
+        children: children.length > 0 ? children : undefined
+      };
+    };
+
+    // Start from body or main content areas
+    const root = {
+      type: 'PAGE',
+      tag: 'body',
+      label: document.title,
+      bounds: { x: 0, y: 0, w: viewW, h: document.documentElement.scrollHeight },
+      children: []
+    };
+
+    // Process major landmarks first
+    const landmarks = ['header', 'nav', 'main', 'aside', 'footer', '[role="banner"]', '[role="navigation"]', '[role="main"]', '[role="complementary"]', '[role="contentinfo"]'];
+    const processedEls = new Set();
+
+    landmarks.forEach(selector => {
+      document.querySelectorAll(selector).forEach(el => {
+        if (processedEls.has(el)) return;
+        const node = buildNode(el, 1);
+        if (node) {
+          root.children.push(node);
+          processedEls.add(el);
+        }
+      });
+    });
+
+    // If no landmarks found, process direct body children
+    if (root.children.length === 0) {
+      Array.from(document.body.children).forEach(el => {
+        if (processedEls.has(el)) return;
+        const node = buildNode(el, 1);
+        if (node) root.children.push(node);
+      });
+    }
+
+    return root;
+  }
+
+  /**
+   * Get semantic type of element
+   */
+  getSemanticType(el) {
+    const tag = el.tagName.toLowerCase();
+    const role = el.getAttribute('role');
+
+    // Explicit roles
+    if (role) {
+      const roleMap = {
+        'banner': 'HEADER',
+        'navigation': 'NAV',
+        'main': 'MAIN',
+        'complementary': 'SIDEBAR',
+        'contentinfo': 'FOOTER',
+        'article': 'ARTICLE',
+        'region': 'SECTION',
+        'form': 'FORM',
+        'search': 'SEARCH',
+        'button': 'button',
+        'link': 'link',
+        'listbox': 'select',
+        'textbox': 'input',
+        'dialog': 'DIALOG',
+        'alert': 'ALERT',
+        'alertdialog': 'DIALOG'
+      };
+      if (roleMap[role]) return roleMap[role];
+    }
+
+    // Semantic tags
+    const tagMap = {
+      'header': 'HEADER',
+      'nav': 'NAV',
+      'main': 'MAIN',
+      'aside': 'SIDEBAR',
+      'footer': 'FOOTER',
+      'article': 'ARTICLE',
+      'section': 'SECTION',
+      'form': 'FORM',
+      'dialog': 'DIALOG',
+      'h1': 'h1', 'h2': 'h2', 'h3': 'h3', 'h4': 'h4', 'h5': 'h5', 'h6': 'h6',
+      'button': 'button',
+      'a': 'link',
+      'input': 'input',
+      'textarea': 'input',
+      'select': 'select',
+      'img': 'image',
+      'video': 'video',
+      'audio': 'audio',
+      'iframe': 'embed',
+      'ul': 'list',
+      'ol': 'list',
+      'table': 'table',
+      'figure': 'figure'
+    };
+
+    if (tagMap[tag]) return tagMap[tag];
+
+    // Class-based detection
+    const className = el.className?.toString().toLowerCase() || '';
+    if (className.includes('comment')) return 'comment';
+    if (className.includes('card')) return 'card';
+    if (className.includes('modal')) return 'DIALOG';
+    if (className.includes('sidebar')) return 'SIDEBAR';
+    if (className.includes('header')) return 'HEADER';
+    if (className.includes('footer')) return 'FOOTER';
+    if (className.includes('nav')) return 'NAV';
+    if (className.includes('menu')) return 'menu';
+    if (className.includes('toolbar')) return 'toolbar';
+    if (className.includes('actions')) return 'actions';
+
+    return null;
+  }
+
+  /**
+   * Get element label for display
+   */
+  getElementLabel(el) {
+    const tag = el.tagName.toLowerCase();
+
+    // For headings, get text
+    if (tag.match(/^h[1-6]$/)) {
+      return el.textContent.trim();
+    }
+
+    // For links and buttons, get text
+    if (tag === 'a' || tag === 'button') {
+      return el.textContent.trim() || el.getAttribute('aria-label');
+    }
+
+    // For inputs, get placeholder or label
+    if (tag === 'input' || tag === 'textarea') {
+      return el.placeholder || el.getAttribute('aria-label');
+    }
+
+    // For images, get alt
+    if (tag === 'img') {
+      return el.alt || '(image)';
+    }
+
+    // For sections with headings
+    const heading = el.querySelector('h1, h2, h3, h4');
+    if (heading) return heading.textContent.trim();
+
+    // aria-label
+    if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
+
+    return null;
+  }
+
+  /**
+   * Get spatial description of element
+   */
+  getSpatialDescription(rect, viewW, viewH) {
+    const parts = [];
+
+    // Horizontal position
+    const centerX = rect.left + rect.width / 2;
+    if (centerX < viewW * 0.33) parts.push('left');
+    else if (centerX > viewW * 0.67) parts.push('right');
+    else parts.push('center');
+
+    // Vertical position
+    if (rect.top < 100) parts.push('top');
+    else if (rect.bottom > viewH - 100) parts.push('bottom');
+
+    // Size hints
+    if (rect.width > viewW * 0.9) parts.push('full-width');
+    else if (rect.width < 200) parts.push('narrow');
+
+    if (rect.height > viewH * 0.8) parts.push('tall');
+    else if (rect.height < 50) parts.push('short');
+
+    // Fixed/sticky detection
+    const style = window.getComputedStyle(rect.width ? document.elementFromPoint(rect.left + 5, rect.top + 5) || document.body : document.body);
+    if (style.position === 'fixed' || style.position === 'sticky') {
+      parts.push('sticky');
+    }
+
+    return parts.join(', ');
+  }
+
+  /**
+   * Get interactive info for element
+   */
+  getInteractiveInfo(el) {
+    const tag = el.tagName.toLowerCase();
+    const role = el.getAttribute('role');
+
+    if (tag === 'button' || role === 'button') {
+      return { type: 'button', action: el.textContent.trim().slice(0, 20) };
+    }
+
+    if (tag === 'a') {
+      const href = el.getAttribute('href');
+      return { type: 'link', destination: href?.slice(0, 50) };
+    }
+
+    if (tag === 'input') {
+      return { type: 'input', inputType: el.type, required: el.required };
+    }
+
+    if (tag === 'select') {
+      const options = el.querySelectorAll('option');
+      return { type: 'select', optionCount: options.length };
+    }
+
+    if (tag === 'form') {
+      const fields = el.querySelectorAll('input, select, textarea');
+      return { type: 'form', fieldCount: fields.length };
+    }
+
+    return null;
+  }
+
+  /**
+   * Get significant children (skip noise)
+   */
+  getSignificantChildren(el) {
+    const dominated = new Set();
+    const candidates = [];
+
+    // Collect potentially significant children
+    for (const child of el.children) {
+      if (!this.isVisible(child)) continue;
+
+      const tag = child.tagName.toLowerCase();
+      const rect = child.getBoundingClientRect();
+
+      // Skip tiny elements
+      if (rect.width < 20 || rect.height < 10) continue;
+
+      // Skip script/style/meta
+      if (['script', 'style', 'noscript', 'meta', 'link'].includes(tag)) continue;
+
+      // Check if semantic or has significant content
+      const isSignificant =
+        this.getSemanticType(child) ||
+        child.querySelector('h1, h2, h3, h4, article, section, form, nav, aside') ||
+        child.querySelectorAll('button, a, input').length > 0 ||
+        (child.textContent?.trim().length > 50);
+
+      if (isSignificant) {
+        candidates.push(child);
+      }
+    }
+
+    // Remove dominated elements (contained by others)
+    for (const c of candidates) {
+      for (const other of candidates) {
+        if (c !== other && other.contains(c)) {
+          dominated.add(c);
+        }
+      }
+    }
+
+    return candidates.filter(c => !dominated.has(c)).slice(0, 20);
+  }
+
+  /**
+   * Extract content with full attribution
+   */
+  getAttributedContent() {
+    const content = [];
+
+    // Find comment-like structures
+    const commentSelectors = [
+      '[class*="comment"]:not([class*="comment-form"]):not([class*="comment-input"])',
+      '[data-testid*="comment"]',
+      '.tiptap',
+      '.ProseMirror'
+    ];
+
+    const commentContainers = document.querySelectorAll(commentSelectors.join(', '));
+    const processed = new Set();
+
+    commentContainers.forEach(container => {
+      // Skip if inside another comment
+      if (container.closest('[class*="comment"]') !== container &&
+          container.matches('[class*="comment"]')) return;
+
+      // Skip if already processed
+      const text = container.textContent?.trim();
+      if (!text || text.length < 10 || processed.has(text.slice(0, 100))) return;
+      processed.add(text.slice(0, 100));
+
+      // Extract author
+      const authorEl = container.querySelector('[class*="author"], [class*="user"], a[href*="/@"], a[href*="/user/"]');
+      const author = authorEl?.textContent?.trim()?.replace(/^@/, '@');
+
+      // Extract timestamp
+      const timeEl = container.querySelector('time, [datetime], [class*="time"], [class*="ago"]');
+      const timestamp = timeEl?.getAttribute('datetime') || timeEl?.textContent?.trim();
+
+      // Extract engagement
+      const voteEl = container.querySelector('[class*="vote"], [class*="digg"], [class*="like"]');
+      const voteCount = voteEl?.textContent?.match(/\d+/)?.[0];
+
+      // Extract actual content (excluding metadata)
+      let contentText = text;
+      if (authorEl) contentText = contentText.replace(authorEl.textContent, '');
+      if (timeEl) contentText = contentText.replace(timeEl.textContent, '');
+      contentText = contentText.replace(/^\s*[\d]+\s*(digg|like|vote)s?\s*/i, '').trim();
+
+      // Extract links
+      const links = Array.from(container.querySelectorAll('a[href]')).map(a => ({
+        text: a.textContent.trim().slice(0, 50),
+        url: a.href
+      })).filter(l => l.text && !l.text.startsWith('@'));
+
+      // Detect available actions
+      const actions = [];
+      if (container.querySelector('[class*="reply"], button[aria-label*="reply"]')) {
+        actions.push('reply');
+      }
+      if (container.querySelector('[class*="vote"], [class*="digg"]')) {
+        actions.push('vote');
+      }
+      if (container.querySelector('[class*="report"], [class*="flag"]')) {
+        actions.push('report');
+      }
+
+      content.push({
+        type: 'comment',
+        author,
+        timestamp,
+        engagement: voteCount ? { votes: parseInt(voteCount) } : null,
+        text: contentText.slice(0, 500),
+        links: links.length > 0 ? links : undefined,
+        actions: actions.length > 0 ? actions : undefined
+      });
+    });
+
+    // Find main article content
+    const article = document.querySelector('article, [role="article"]');
+    if (article) {
+      const titleEl = article.querySelector('h1, h2, [class*="title"]');
+      const summaryEl = article.querySelector('[class*="summary"], [class*="description"], [class*="tldr"], p');
+
+      content.unshift({
+        type: 'article',
+        title: titleEl?.textContent?.trim(),
+        summary: summaryEl?.textContent?.trim()?.slice(0, 300),
+        source: document.querySelector('[class*="source"], cite')?.textContent?.trim()
+      });
+    }
+
+    return content;
+  }
+
+  /**
+   * Generate ASCII boundary map showing page regions
+   */
+  getAsciiMap() {
+    const COLS = 60;
+    const ROWS = 30;
+    const viewW = window.innerWidth;
+    const viewH = window.innerHeight;
+
+    // Create character grid
+    const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(' '));
+
+    // Region data for labeling
+    const regions = [];
+
+    // Helper to draw box
+    const drawBox = (x1, y1, x2, y2, label, fill = ' ') => {
+      // Clamp coordinates
+      x1 = Math.max(0, Math.min(COLS - 1, x1));
+      x2 = Math.max(0, Math.min(COLS - 1, x2));
+      y1 = Math.max(0, Math.min(ROWS - 1, y1));
+      y2 = Math.max(0, Math.min(ROWS - 1, y2));
+
+      if (x2 - x1 < 2 || y2 - y1 < 1) return;
+
+      // Top border
+      grid[y1][x1] = '┌';
+      grid[y1][x2] = '┐';
+      for (let x = x1 + 1; x < x2; x++) grid[y1][x] = '─';
+
+      // Bottom border
+      if (y2 < ROWS) {
+        grid[y2][x1] = '└';
+        grid[y2][x2] = '┘';
+        for (let x = x1 + 1; x < x2; x++) grid[y2][x] = '─';
+      }
+
+      // Side borders
+      for (let y = y1 + 1; y < y2; y++) {
+        grid[y][x1] = '│';
+        grid[y][x2] = '│';
+        // Fill interior
+        if (fill !== ' ') {
+          for (let x = x1 + 1; x < x2; x++) {
+            if (grid[y][x] === ' ') grid[y][x] = fill;
+          }
+        }
+      }
+
+      // Add label if fits
+      if (label && x2 - x1 > label.length + 2) {
+        const labelX = x1 + 2;
+        const labelY = y1 + 1;
+        if (labelY < ROWS - 1) {
+          for (let i = 0; i < label.length && labelX + i < x2; i++) {
+            grid[labelY][labelX + i] = label[i];
+          }
+        }
+      }
+
+      regions.push({ label, x1, y1, x2, y2 });
+    };
+
+    // Map coordinates
+    const mapX = (px) => Math.floor((px / viewW) * COLS);
+    const mapY = (py) => Math.floor((py / viewH) * ROWS);
+
+    // Draw major landmarks
+    const landmarkConfig = [
+      { selector: 'header, [role="banner"]', label: 'HEADER', fill: '▓' },
+      { selector: 'nav, [role="navigation"]', label: 'NAV', fill: '░' },
+      { selector: 'main, [role="main"]', label: 'MAIN', fill: '·' },
+      { selector: 'aside, [role="complementary"]', label: 'SIDE', fill: '░' },
+      { selector: 'footer, [role="contentinfo"]', label: 'FOOTER', fill: '▓' },
+      { selector: 'article, [role="article"]', label: 'ARTICLE', fill: ' ' },
+      { selector: '[class*="comment"]', label: 'COMMENTS', fill: ' ' },
+      { selector: 'form', label: 'FORM', fill: '·' }
+    ];
+
+    landmarkConfig.forEach(({ selector, label, fill }) => {
+      const el = document.querySelector(selector);
+      if (!el || !this.isVisible(el)) return;
+
+      const rect = el.getBoundingClientRect();
+      const x1 = mapX(rect.left);
+      const y1 = mapY(rect.top);
+      const x2 = mapX(rect.right);
+      const y2 = mapY(rect.bottom);
+
+      drawBox(x1, y1, x2, y2, label, fill);
+    });
+
+    // Convert to string
+    const lines = grid.map(row => row.join(''));
+
+    return {
+      map: lines.join('\n'),
+      width: COLS,
+      height: ROWS,
+      regions
+    };
   }
 }
 
