@@ -241,18 +241,27 @@ class PageScope {
    */
   getTextBlocks() {
     const blocks = [];
-    const MIN_WORDS = 5;
+    const MIN_WORDS = 3; // Lowered to catch short comments
     const seen = new Set();
 
     // Find elements with substantial text content
-    const candidates = document.querySelectorAll('p, div, span, li, td, blockquote, [class*="comment"], [class*="post"], [class*="content"], [class*="text"], [class*="body"], [data-testid*="comment"], [data-testid*="post"]');
+    // Added Digg-specific selectors and common comment patterns
+    const candidates = document.querySelectorAll(`
+      p, blockquote, li, td,
+      [class*="comment"], [class*="post"], [class*="content"], [class*="text"], [class*="body"],
+      [data-testid*="comment"], [data-testid*="post"],
+      .tiptap, .ProseMirror,
+      [class*="rt-Text"], [class*="rt-Flex"],
+      div[id^="radix-"] > div,
+      section[class*="flex"] > div[class*="flex"] > div
+    `);
 
     candidates.forEach((el, idx) => {
       if (!this.isVisible(el)) return;
 
       // Skip if parent already captured (avoid duplicates)
       const text = el.textContent?.trim() || '';
-      if (seen.has(text) || text.length < 20) return;
+      if (seen.has(text) || text.length < 10) return; // Lowered min length
 
       // Count words
       const words = text.match(/\b\w+\b/g) || [];
