@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "PageScope - Page Structure Inspector",
+  "version": "1.0.0",
+  "description": "Analyze page structure, accessibility tree, and interactive elements. Export detailed reports in JSON, Markdown, or plain text formats.",
+
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
+
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "storage",
+    "scripting"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }],
+
+  "action": {
+    "default_icon": "icons/icon-48.png",
+    "default_title": "PageScope Inspector"
+  },
+
+  "sidebar_action": {
+    "default_title": "PageScope",
+    "default_panel": "sidebar/sidebar.html",
+    "default_icon": "icons/icon-48.png"
+  },
+
+  "background": {
+    "scripts": ["background.js"]
+  },
+
+  "options_ui": {
+    "page": "options/options.html"
+  },
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "pagescope@internetuniverse.org",
+      "strict_min_version": "140.0"
+    }
+  },
+
+  "data_collection_permissions": {
+    "required": false
+  },
+
+  "developer": {
+    "name": "Zack",
+    "url": "https://github.com/johnzfitch/pagescope"
+  },
+
+  "homepage_url": "https://github.com/johnzfitch/pagescope"
+}

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>PageScope Settings</h1>
+    
+    <section>
+      <h2>General</h2>
+      <label>
+        <input type="checkbox" id="auto-refresh">
+        Auto-refresh on page navigation
+      </label>
+    </section>
+    
+    <section>
+      <h2>Advanced</h2>
+      <p>Additional features and integrations.</p>
+
+      <div class="info-box">
+        <h3>🚀 MCP Integration Available</h3>
+        <p>Want to use PageScope with Claude Code or other AI assistants?</p>
+        <p>The <strong>MCP server</strong> is available separately on GitHub for advanced users.</p>
+        <p>It's not needed for normal use - just export your data and open it in Claude!</p>
+        <a href="https://github.com/yourusername/pagescope/tree/main/mcp-server" target="_blank">Learn more →</a>
+      </div>
+    </section>
+    
+    <button id="save">Save Settings</button>
+    <div id="status"></div>
+  </div>
+  
+  <script src="options.js"></script>
+</body>
+</html>
