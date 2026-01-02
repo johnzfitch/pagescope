@@ -20,7 +20,8 @@ class PageScope {
       accessibility: this.getAccessibility(),
       viewport: this.getViewportInfo(),
       textBlocks: this.getTextBlocks(),
-      brailleMap: this.getBrailleMap()
+      brailleMap: this.getBrailleMap(),
+      semanticStructure: this.getSemanticStructure()
     };
   }
   
@@ -712,6 +713,313 @@ class PageScope {
     text = text.replace(/\s+/g, ' ').trim();
 
     return text;
+  }
+
+  /**
+   * Get semantic structure of the page - similar to accessibility tree
+   * Captures document hierarchy, ARIA semantics, and content relationships
+   */
+  getSemanticStructure() {
+    const structure = {
+      documentOutline: [],      // Heading hierarchy
+      landmarks: [],            // ARIA landmarks
+      forms: [],                // Form structure with labels
+      lists: [],                // List hierarchy
+      tables: [],               // Table structure
+      interactiveElements: [],  // Buttons, links with states
+      liveRegions: [],          // ARIA live regions
+      relationships: []         // aria-controls, aria-owns, etc.
+    };
+
+    // 1. Document outline - heading hierarchy
+    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    headings.forEach(h => {
+      if (!this.isVisible(h)) return;
+      const level = parseInt(h.tagName[1]);
+      structure.documentOutline.push({
+        level,
+        text: h.textContent.trim().slice(0, 100),
+        id: h.id || null,
+        indent: '  '.repeat(level - 1)
+      });
+    });
+
+    // 2. Landmark regions with accessible names
+    const landmarkSelectors = [
+      ['header, [role="banner"]', 'banner'],
+      ['nav, [role="navigation"]', 'navigation'],
+      ['main, [role="main"]', 'main'],
+      ['aside, [role="complementary"]', 'complementary'],
+      ['footer, [role="contentinfo"]', 'contentinfo'],
+      ['[role="search"]', 'search'],
+      ['form, [role="form"]', 'form'],
+      ['section[aria-label], section[aria-labelledby], [role="region"][aria-label]', 'region'],
+      ['[role="alert"]', 'alert'],
+      ['[role="dialog"], dialog', 'dialog']
+    ];
+
+    landmarkSelectors.forEach(([selector, role]) => {
+      document.querySelectorAll(selector).forEach(el => {
+        if (!this.isVisible(el)) return;
+        const name = this.getAccessibleName(el);
+        structure.landmarks.push({
+          role,
+          name: name || '(unnamed)',
+          tag: el.tagName.toLowerCase(),
+          hasAriaLabel: !!el.getAttribute('aria-label'),
+          childLandmarks: this.countChildLandmarks(el)
+        });
+      });
+    });
+
+    // 3. Form structure with input labels
+    document.querySelectorAll('form').forEach(form => {
+      if (!this.isVisible(form)) return;
+      const formData = {
+        name: this.getAccessibleName(form) || '(unnamed form)',
+        action: form.action ? new URL(form.action, location.href).pathname : null,
+        method: form.method || 'get',
+        fields: []
+      };
+
+      form.querySelectorAll('input, select, textarea, button').forEach(field => {
+        if (!this.isVisible(field) || field.type === 'hidden') return;
+        const fieldData = {
+          type: field.type || field.tagName.toLowerCase(),
+          name: field.name || null,
+          label: this.getAccessibleName(field),
+          required: field.required || field.getAttribute('aria-required') === 'true',
+          disabled: field.disabled || field.getAttribute('aria-disabled') === 'true',
+          invalid: field.getAttribute('aria-invalid') === 'true',
+          describedBy: this.getDescribedByText(field)
+        };
+        formData.fields.push(fieldData);
+      });
+
+      if (formData.fields.length > 0) {
+        structure.forms.push(formData);
+      }
+    });
+
+    // 4. List hierarchy
+    document.querySelectorAll('ul, ol, dl, [role="list"]').forEach(list => {
+      if (!this.isVisible(list)) return;
+      // Skip if nested inside another list we'll capture
+      if (list.closest('ul ul, ol ol, ul ol, ol ul')) return;
+
+      const items = list.querySelectorAll(':scope > li, :scope > [role="listitem"], :scope > dt, :scope > dd');
+      if (items.length === 0) return;
+
+      structure.lists.push({
+        type: list.tagName.toLowerCase(),
+        role: list.getAttribute('role') || null,
+        label: this.getAccessibleName(list),
+        itemCount: items.length,
+        nested: list.querySelectorAll('ul, ol').length > 0,
+        items: Array.from(items).slice(0, 10).map(item => ({
+          text: item.textContent.trim().slice(0, 50),
+          hasLink: !!item.querySelector('a')
+        }))
+      });
+    });
+
+    // 5. Table structure
+    document.querySelectorAll('table, [role="table"]').forEach(table => {
+      if (!this.isVisible(table)) return;
+      const caption = table.querySelector('caption');
+      const headers = table.querySelectorAll('th, [role="columnheader"], [role="rowheader"]');
+      const rows = table.querySelectorAll('tr, [role="row"]');
+
+      structure.tables.push({
+        caption: caption?.textContent.trim() || this.getAccessibleName(table),
+        headerCount: headers.length,
+        rowCount: rows.length,
+        headers: Array.from(headers).slice(0, 10).map(h => h.textContent.trim().slice(0, 30)),
+        hasScope: Array.from(headers).some(h => h.scope)
+      });
+    });
+
+    // 6. Interactive elements with states
+    const interactiveSelectors = 'button, [role="button"], a[href], input, select, textarea, [tabindex]:not([tabindex="-1"]), [role="link"], [role="checkbox"], [role="radio"], [role="tab"], [role="menuitem"], [role="switch"]';
+    document.querySelectorAll(interactiveSelectors).forEach(el => {
+      if (!this.isVisible(el)) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 5 || rect.height < 5) return;
+
+      const role = this.getRole(el);
+      const name = this.getAccessibleName(el);
+      if (!name && role === 'generic') return;
+
+      const states = this.getAriaStates(el);
+      if (Object.keys(states).length > 0 || name) {
+        structure.interactiveElements.push({
+          role,
+          name: name || '(unlabeled)',
+          tag: el.tagName.toLowerCase(),
+          states,
+          describedBy: this.getDescribedByText(el)
+        });
+      }
+    });
+
+    // Limit interactive elements to top 50
+    structure.interactiveElements = structure.interactiveElements.slice(0, 50);
+
+    // 7. Live regions
+    document.querySelectorAll('[aria-live], [role="alert"], [role="status"], [role="log"], [role="marquee"], [role="timer"]').forEach(el => {
+      if (!this.isVisible(el)) return;
+      structure.liveRegions.push({
+        role: el.getAttribute('role') || 'generic',
+        ariaLive: el.getAttribute('aria-live') || 'polite',
+        ariaAtomic: el.getAttribute('aria-atomic') === 'true',
+        text: el.textContent.trim().slice(0, 100)
+      });
+    });
+
+    // 8. ARIA relationships
+    document.querySelectorAll('[aria-controls], [aria-owns], [aria-flowto], [aria-describedby], [aria-labelledby]').forEach(el => {
+      if (!this.isVisible(el)) return;
+      const rel = {
+        source: {
+          role: this.getRole(el),
+          name: this.getAccessibleName(el)?.slice(0, 30)
+        },
+        relationships: {}
+      };
+
+      ['aria-controls', 'aria-owns', 'aria-flowto', 'aria-describedby', 'aria-labelledby'].forEach(attr => {
+        const ids = el.getAttribute(attr);
+        if (ids) {
+          rel.relationships[attr] = ids.split(/\s+/).map(id => {
+            const target = document.getElementById(id);
+            return target ? {
+              id,
+              role: this.getRole(target),
+              exists: true
+            } : { id, exists: false };
+          });
+        }
+      });
+
+      if (Object.keys(rel.relationships).length > 0) {
+        structure.relationships.push(rel);
+      }
+    });
+
+    // Limit relationships
+    structure.relationships = structure.relationships.slice(0, 30);
+
+    return structure;
+  }
+
+  /**
+   * Get accessible name following ARIA name computation (simplified)
+   */
+  getAccessibleName(el) {
+    // aria-labelledby takes precedence
+    const labelledBy = el.getAttribute('aria-labelledby');
+    if (labelledBy) {
+      const names = labelledBy.split(/\s+/).map(id => {
+        const target = document.getElementById(id);
+        return target?.textContent.trim();
+      }).filter(Boolean);
+      if (names.length) return names.join(' ');
+    }
+
+    // aria-label
+    if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
+
+    // For inputs, check associated label
+    if (el.labels?.length) {
+      return Array.from(el.labels).map(l => l.textContent.trim()).join(' ');
+    }
+
+    // For images, use alt
+    if (el.tagName === 'IMG' && el.alt) return el.alt;
+
+    // title attribute
+    if (el.title) return el.title;
+
+    // For buttons/links, use text content
+    if (['BUTTON', 'A', 'SUMMARY'].includes(el.tagName)) {
+      const text = el.textContent.trim();
+      if (text) return text.slice(0, 100);
+    }
+
+    // placeholder for inputs (fallback, not ideal)
+    if (el.placeholder) return `[placeholder: ${el.placeholder}]`;
+
+    return null;
+  }
+
+  /**
+   * Get text from aria-describedby references
+   */
+  getDescribedByText(el) {
+    const describedBy = el.getAttribute('aria-describedby');
+    if (!describedBy) return null;
+
+    const texts = describedBy.split(/\s+/).map(id => {
+      const target = document.getElementById(id);
+      return target?.textContent.trim();
+    }).filter(Boolean);
+
+    return texts.length ? texts.join(' ') : null;
+  }
+
+  /**
+   * Get ARIA states for an element
+   */
+  getAriaStates(el) {
+    const states = {};
+
+    // Boolean states
+    const booleanAttrs = ['aria-expanded', 'aria-selected', 'aria-checked', 'aria-pressed', 'aria-disabled', 'aria-hidden', 'aria-invalid', 'aria-busy', 'aria-current'];
+    booleanAttrs.forEach(attr => {
+      const val = el.getAttribute(attr);
+      if (val && val !== 'false' && val !== 'undefined') {
+        states[attr.replace('aria-', '')] = val === 'true' ? true : val;
+      }
+    });
+
+    // Check native states
+    if (el.disabled) states.disabled = true;
+    if (el.required) states.required = true;
+    if (el.readOnly) states.readonly = true;
+    if (el.checked) states.checked = true;
+
+    // Value states
+    if (el.getAttribute('aria-valuenow')) {
+      states.value = {
+        now: el.getAttribute('aria-valuenow'),
+        min: el.getAttribute('aria-valuemin'),
+        max: el.getAttribute('aria-valuemax'),
+        text: el.getAttribute('aria-valuetext')
+      };
+    }
+
+    // Level (for headings, tree items)
+    if (el.getAttribute('aria-level')) {
+      states.level = parseInt(el.getAttribute('aria-level'));
+    }
+
+    // Position in set
+    if (el.getAttribute('aria-posinset')) {
+      states.position = {
+        index: parseInt(el.getAttribute('aria-posinset')),
+        total: parseInt(el.getAttribute('aria-setsize'))
+      };
+    }
+
+    return states;
+  }
+
+  /**
+   * Count child landmarks within an element
+   */
+  countChildLandmarks(el) {
+    const landmarks = el.querySelectorAll('nav, main, aside, header, footer, [role="navigation"], [role="main"], [role="complementary"], [role="banner"], [role="contentinfo"], [role="search"]');
+    return landmarks.length;
   }
 }
 

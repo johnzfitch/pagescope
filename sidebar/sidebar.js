@@ -994,6 +994,177 @@ class SidebarUI {
       });
     }
 
+    // Semantic structure section
+    if (this.data.semanticStructure) {
+      const sem = this.data.semanticStructure;
+
+      // Document outline - heading hierarchy
+      if (sem.documentOutline && sem.documentOutline.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                    DOCUMENT OUTLINE\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        sem.documentOutline.forEach(h => {
+          const prefix = '│ '.repeat(h.level - 1) + '├─';
+          text += `${prefix} H${h.level}: ${this.cleanText(h.text)}\n`;
+        });
+        text += '\n';
+      }
+
+      // Landmark regions with accessible names
+      if (sem.landmarks && sem.landmarks.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                    LANDMARK REGIONS\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        const landmarksByRole = {};
+        sem.landmarks.forEach(l => {
+          if (!landmarksByRole[l.role]) landmarksByRole[l.role] = [];
+          landmarksByRole[l.role].push(l);
+        });
+
+        for (const [role, landmarks] of Object.entries(landmarksByRole)) {
+          text += `[${role.toUpperCase()}]\n`;
+          landmarks.forEach(l => {
+            const labelInfo = l.hasAriaLabel ? ' (aria-label)' : '';
+            const childInfo = l.childLandmarks > 0 ? ` [contains ${l.childLandmarks} sub-landmarks]` : '';
+            text += `  • ${l.name}${labelInfo}${childInfo}\n`;
+          });
+          text += '\n';
+        }
+      }
+
+      // Form structure
+      if (sem.forms && sem.forms.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                    FORM STRUCTURE\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        sem.forms.forEach((form, idx) => {
+          text += `Form ${idx + 1}: ${this.cleanText(form.name)}\n`;
+          if (form.action) text += `  Action: ${form.action} (${form.method.toUpperCase()})\n`;
+          text += `  Fields:\n`;
+
+          form.fields.forEach(field => {
+            const states = [];
+            if (field.required) states.push('required');
+            if (field.disabled) states.push('disabled');
+            if (field.invalid) states.push('invalid');
+            const stateStr = states.length ? ` [${states.join(', ')}]` : '';
+
+            text += `    • [${field.type}] ${field.label || '(unlabeled)'}${stateStr}\n`;
+            if (field.describedBy) {
+              text += `      Description: ${this.cleanText(field.describedBy).slice(0, 60)}\n`;
+            }
+          });
+          text += '\n';
+        });
+      }
+
+      // Interactive elements with ARIA states
+      const elementsWithStates = sem.interactiveElements?.filter(el =>
+        Object.keys(el.states).length > 0
+      ) || [];
+
+      if (elementsWithStates.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                    INTERACTIVE ELEMENTS (WITH STATES)\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        elementsWithStates.slice(0, 30).forEach(el => {
+          const stateStrs = Object.entries(el.states).map(([k, v]) => {
+            if (typeof v === 'object') return `${k}=${JSON.stringify(v)}`;
+            return v === true ? k : `${k}=${v}`;
+          });
+
+          text += `• [${el.role}] ${this.cleanText(el.name)}\n`;
+          if (stateStrs.length) {
+            text += `  States: ${stateStrs.join(', ')}\n`;
+          }
+          if (el.describedBy) {
+            text += `  Described by: ${this.cleanText(el.describedBy).slice(0, 50)}\n`;
+          }
+        });
+        text += '\n';
+      }
+
+      // Lists
+      if (sem.lists && sem.lists.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                    LIST STRUCTURE\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        sem.lists.forEach((list, idx) => {
+          const nestedLabel = list.nested ? ' (contains nested lists)' : '';
+          text += `List ${idx + 1}: ${list.type.toUpperCase()}${nestedLabel}\n`;
+          if (list.label) text += `  Label: ${this.cleanText(list.label)}\n`;
+          text += `  Items: ${list.itemCount}\n`;
+
+          if (list.items && list.items.length > 0) {
+            list.items.slice(0, 5).forEach((item, i) => {
+              const linkMarker = item.hasLink ? ' →' : '';
+              text += `    ${i + 1}. ${this.cleanText(item.text)}${linkMarker}\n`;
+            });
+            if (list.itemCount > 5) {
+              text += `    ... and ${list.itemCount - 5} more items\n`;
+            }
+          }
+          text += '\n';
+        });
+      }
+
+      // Tables
+      if (sem.tables && sem.tables.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                    TABLE STRUCTURE\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        sem.tables.forEach((table, idx) => {
+          text += `Table ${idx + 1}: ${table.caption || '(no caption)'}\n`;
+          text += `  Rows: ${table.rowCount}, Headers: ${table.headerCount}\n`;
+          if (table.headers.length > 0) {
+            text += `  Column headers: ${table.headers.join(' | ')}\n`;
+          }
+          text += `  Properly scoped: ${table.hasScope ? 'Yes' : 'No'}\n\n`;
+        });
+      }
+
+      // Live regions
+      if (sem.liveRegions && sem.liveRegions.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                    LIVE REGIONS (DYNAMIC CONTENT)\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        sem.liveRegions.forEach(region => {
+          text += `• [${region.role}] aria-live="${region.ariaLive}"`;
+          if (region.ariaAtomic) text += ' (atomic)';
+          text += '\n';
+          if (region.text) {
+            text += `  Current content: ${this.cleanText(region.text)}\n`;
+          }
+        });
+        text += '\n';
+      }
+
+      // ARIA relationships
+      if (sem.relationships && sem.relationships.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                    ARIA RELATIONSHIPS\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        sem.relationships.forEach(rel => {
+          text += `• [${rel.source.role}] ${rel.source.name || '(unnamed)'}\n`;
+          for (const [attr, targets] of Object.entries(rel.relationships)) {
+            const targetList = targets.map(t =>
+              t.exists ? `${t.id} [${t.role}]` : `${t.id} (MISSING!)`
+            ).join(', ');
+            text += `  ${attr}: ${targetList}\n`;
+          }
+        });
+        text += '\n';
+      }
+    }
+
     // Text blocks (comments, posts) if available
     if (this.data.textBlocks && this.data.textBlocks.length > 0) {
       text += '═'.repeat(80) + '\n';
