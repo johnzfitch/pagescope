@@ -18,7 +18,9 @@ class PageScope {
       structure: this.getStructure(),
       interactive: this.getInteractive(),
       accessibility: this.getAccessibility(),
-      viewport: this.getViewportInfo()
+      viewport: this.getViewportInfo(),
+      textBlocks: this.getTextBlocks(),
+      brailleMap: this.getBrailleMap()
     };
   }
   
@@ -232,7 +234,359 @@ class PageScope {
       scrollHeight: document.documentElement.scrollHeight
     };
   }
-  
+
+  /**
+   * Extract text blocks - captures comments, posts, and other text content
+   * that may not use semantic HTML tags
+   */
+  getTextBlocks() {
+    const blocks = [];
+    const MIN_WORDS = 5;
+    const seen = new Set();
+
+    // Find elements with substantial text content
+    const candidates = document.querySelectorAll('p, div, span, li, td, blockquote, [class*="comment"], [class*="post"], [class*="content"], [class*="text"], [class*="body"], [data-testid*="comment"], [data-testid*="post"]');
+
+    candidates.forEach((el, idx) => {
+      if (!this.isVisible(el)) return;
+
+      // Skip if parent already captured (avoid duplicates)
+      const text = el.textContent?.trim() || '';
+      if (seen.has(text) || text.length < 20) return;
+
+      // Count words
+      const words = text.match(/\b\w+\b/g) || [];
+      if (words.length < MIN_WORDS) return;
+
+      // Skip if mostly code/script content
+      if (el.closest('script, style, code, pre, noscript')) return;
+
+      // Skip navigation/UI elements
+      if (el.closest('nav, header, footer') && words.length < 20) return;
+
+      const rect = el.getBoundingClientRect();
+
+      // Check if this text is contained in an already-added block
+      let isNested = false;
+      for (const block of blocks) {
+        if (text.includes(block.text) || block.text.includes(text)) {
+          if (text.length <= block.text.length) {
+            isNested = true;
+            break;
+          }
+        }
+      }
+      if (isNested) return;
+
+      seen.add(text);
+      blocks.push({
+        id: idx,
+        text: text.slice(0, 2000),
+        wordCount: words.length,
+        bounds: {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height)
+        },
+        path: this.getPath(el),
+        tag: el.tagName.toLowerCase(),
+        className: el.className?.toString().slice(0, 100) || ''
+      });
+    });
+
+    // Sort by vertical position (reading order)
+    blocks.sort((a, b) => a.bounds.y - b.bounds.y);
+
+    return blocks.slice(0, 100); // Limit to prevent huge exports
+  }
+
+  /**
+   * Generate a Braille spatial map with semantic zone awareness
+   * Uses Unicode Braille patterns (U+2800-U+28FF) to create a tactile wireframe
+   * Inspired by semantic zone upscaling - different content types get different patterns
+   */
+  getBrailleMap() {
+    const COLS = 80;  // Characters wide
+    const ROWS = 50;  // Characters tall (more rows for detail)
+    const CELL_W = 2; // Braille cell is 2 dots wide
+    const CELL_H = 4; // Braille cell is 4 dots tall
+
+    // Pixel dimensions for our grid
+    const gridW = COLS * CELL_W;
+    const gridH = ROWS * CELL_H;
+
+    // Create pixel grid with semantic zone types
+    const pixels = Array(gridH).fill(null).map(() => Array(gridW).fill(0));
+
+    const viewW = window.innerWidth;
+    const viewH = window.innerHeight;
+
+    // Semantic zone types (matching your zone classification)
+    const ZONES = {
+      EMPTY: 0,
+      TEXT: 1,        // Paragraphs, spans with text
+      HEADING: 2,     // h1-h6
+      BUTTON: 3,      // Buttons, clickable
+      INPUT: 4,       // Form inputs
+      LINK: 5,        // Anchor links
+      IMAGE: 6,       // Images
+      NAV: 7,         // Navigation areas
+      HEADER: 8,      // Header/banner
+      FOOTER: 9,      // Footer
+      ASIDE: 10,      // Sidebars
+      MAIN: 11,       // Main content area
+      LIST: 12,       // Lists (ul, ol)
+      MEDIA: 13,      // Video, audio
+      FORM: 14,       // Form containers
+      CARD: 15        // Article/card containers
+    };
+
+    const detectedZones = [];
+
+    // === SEMANTIC ZONE DETECTION ===
+
+    // 1. Major landmarks (fill areas, not just borders)
+    this.detectAndFillZone(pixels, 'header, [role="banner"]', ZONES.HEADER, viewW, viewH, gridW, gridH, detectedZones, true);
+    this.detectAndFillZone(pixels, 'nav, [role="navigation"]', ZONES.NAV, viewW, viewH, gridW, gridH, detectedZones, true);
+    this.detectAndFillZone(pixels, 'main, [role="main"]', ZONES.MAIN, viewW, viewH, gridW, gridH, detectedZones, true);
+    this.detectAndFillZone(pixels, 'aside, [role="complementary"]', ZONES.ASIDE, viewW, viewH, gridW, gridH, detectedZones, true);
+    this.detectAndFillZone(pixels, 'footer, [role="contentinfo"]', ZONES.FOOTER, viewW, viewH, gridW, gridH, detectedZones, true);
+
+    // 2. Content structure
+    this.detectAndFillZone(pixels, 'article, [role="article"]', ZONES.CARD, viewW, viewH, gridW, gridH, detectedZones, false);
+    this.detectAndFillZone(pixels, 'form', ZONES.FORM, viewW, viewH, gridW, gridH, detectedZones, false);
+    this.detectAndFillZone(pixels, 'ul, ol, [role="list"]', ZONES.LIST, viewW, viewH, gridW, gridH, detectedZones, false);
+
+    // 3. Interactive elements (higher priority - draw on top)
+    this.detectAndFillZone(pixels, 'h1, h2, h3, h4, h5, h6', ZONES.HEADING, viewW, viewH, gridW, gridH, detectedZones, false);
+    this.detectAndFillZone(pixels, 'img, picture, svg:not([class*="icon"])', ZONES.IMAGE, viewW, viewH, gridW, gridH, detectedZones, false);
+    this.detectAndFillZone(pixels, 'video, audio, iframe[src*="youtube"], iframe[src*="vimeo"]', ZONES.MEDIA, viewW, viewH, gridW, gridH, detectedZones, false);
+    this.detectAndFillZone(pixels, 'button, [role="button"], input[type="submit"], input[type="button"]', ZONES.BUTTON, viewW, viewH, gridW, gridH, detectedZones, false);
+    this.detectAndFillZone(pixels, 'input:not([type="submit"]):not([type="button"]):not([type="hidden"]), textarea, select', ZONES.INPUT, viewW, viewH, gridW, gridH, detectedZones, false);
+    this.detectAndFillZone(pixels, 'a[href]', ZONES.LINK, viewW, viewH, gridW, gridH, detectedZones, false);
+
+    // 4. Text blocks (paragraphs with substantial content)
+    document.querySelectorAll('p, [class*="text"], [class*="content"], blockquote').forEach(el => {
+      if (!this.isVisible(el)) return;
+      const text = el.textContent?.trim() || '';
+      if (text.length < 50) return; // Skip short text
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 50 || rect.height < 20) return;
+      this.fillZoneRect(pixels, rect, viewW, viewH, gridW, gridH, ZONES.TEXT, false);
+    });
+
+    // Convert pixel grid to Braille using zone-specific patterns
+    const brailleLines = [];
+    for (let row = 0; row < ROWS; row++) {
+      let line = '';
+      for (let col = 0; col < COLS; col++) {
+        const char = this.zoneToBraille(pixels, col * CELL_W, row * CELL_H, ZONES);
+        line += char;
+      }
+      brailleLines.push(line);
+    }
+
+    // Build legend with zone counts
+    const zoneCounts = {};
+    for (const zone of detectedZones) {
+      zoneCounts[zone.type] = (zoneCounts[zone.type] || 0) + 1;
+    }
+
+    const legendText = [
+      '═══ TACTILE PAGE MAP ═══',
+      '',
+      'LANDMARKS:',
+      `⣿ HEADER (${zoneCounts['header'] || 0})`,
+      `⣶ NAV (${zoneCounts['nav'] || 0})`,
+      `⣤ MAIN (${zoneCounts['main'] || 0})`,
+      `⣴ ASIDE (${zoneCounts['aside'] || 0})`,
+      `⣀ FOOTER (${zoneCounts['footer'] || 0})`,
+      '',
+      'CONTENT:',
+      `⠿ BUTTON`,
+      `⠶ INPUT/FORM`,
+      `⠗ LINK`,
+      `⠻ IMAGE`,
+      `⠛ HEADING`,
+      `⠤ TEXT BLOCK`,
+      `⠇ LIST`,
+      `⠾ MEDIA`,
+      '',
+      `Page: ${document.title.slice(0, 40)}`,
+      `Size: ${viewW}x${viewH}px`
+    ];
+
+    return {
+      grid: brailleLines.join('\n'),
+      width: COLS,
+      height: ROWS,
+      legend: legendText.join('\n'),
+      zones: detectedZones.slice(0, 50),
+      zoneCounts
+    };
+  }
+
+  /**
+   * Detect elements and fill their zones in the pixel grid
+   */
+  detectAndFillZone(pixels, selector, zoneType, viewW, viewH, gridW, gridH, detectedZones, fillArea) {
+    document.querySelectorAll(selector).forEach(el => {
+      if (!this.isVisible(el)) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 5 || rect.height < 5) return;
+
+      this.fillZoneRect(pixels, rect, viewW, viewH, gridW, gridH, zoneType, fillArea);
+
+      detectedZones.push({
+        type: selector.split(',')[0].split('[')[0].trim(),
+        label: el.getAttribute('aria-label') || el.textContent?.trim()?.slice(0, 30) || '',
+        bounds: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }
+      });
+    });
+  }
+
+  /**
+   * Fill a zone rectangle - either full area or border only
+   */
+  fillZoneRect(pixels, rect, viewW, viewH, gridW, gridH, zoneType, fillArea) {
+    const x1 = Math.max(0, Math.floor((rect.left / viewW) * gridW));
+    const y1 = Math.max(0, Math.floor((rect.top / viewH) * gridH));
+    const x2 = Math.min(gridW - 1, Math.ceil((rect.right / viewW) * gridW));
+    const y2 = Math.min(gridH - 1, Math.ceil((rect.bottom / viewH) * gridH));
+
+    for (let y = y1; y <= y2; y++) {
+      for (let x = x1; x <= x2; x++) {
+        if (fillArea || y === y1 || y === y2 || x === x1 || x === x2) {
+          if (pixels[y] && pixels[y][x] !== undefined) {
+            // Higher zone types (interactive) overwrite lower (structural)
+            if (zoneType > pixels[y][x] || pixels[y][x] === 0) {
+              pixels[y][x] = zoneType;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Convert a 2x4 zone block to appropriate Braille character
+   * Different zones get different dot patterns for tactile distinction
+   */
+  zoneToBraille(pixels, startX, startY, ZONES) {
+    // Collect zone types in this cell
+    const zonesInCell = new Set();
+    for (let dy = 0; dy < 4; dy++) {
+      for (let dx = 0; dx < 2; dx++) {
+        const y = startY + dy;
+        const x = startX + dx;
+        if (pixels[y] && pixels[y][x]) {
+          zonesInCell.add(pixels[y][x]);
+        }
+      }
+    }
+
+    if (zonesInCell.size === 0) return '⠀'; // Empty braille
+
+    // Get highest priority zone
+    const primaryZone = Math.max(...zonesInCell);
+
+    // Zone-specific braille patterns (tactilely distinct)
+    const zonePatterns = {
+      [ZONES.EMPTY]: '⠀',
+      [ZONES.TEXT]: '⠤',      // Bottom dots - flowing text
+      [ZONES.HEADING]: '⠛',   // Top heavy - prominence
+      [ZONES.BUTTON]: '⠿',    // Full top - interactive
+      [ZONES.INPUT]: '⠶',     // Middle band - form field
+      [ZONES.LINK]: '⠗',      // Diagonal - navigable
+      [ZONES.IMAGE]: '⠻',     // Dense - visual content
+      [ZONES.NAV]: '⣶',       // Structured - navigation
+      [ZONES.HEADER]: '⣿',    // Full - header bar
+      [ZONES.FOOTER]: '⣀',    // Bottom - footer
+      [ZONES.ASIDE]: '⣴',     // Side pattern - sidebar
+      [ZONES.MAIN]: '⣤',      // Center mass - main content
+      [ZONES.LIST]: '⠇',      // Vertical dots - list items
+      [ZONES.MEDIA]: '⠾',     // Heavy - media block
+      [ZONES.FORM]: '⠒',      // Horizontal - form area
+      [ZONES.CARD]: '⠉'       // Top line - card container
+    };
+
+    return zonePatterns[primaryZone] || this.pixelsToBraille(pixels, startX, startY);
+  }
+
+  /**
+   * Fill a rectangle in the pixel grid
+   */
+  fillRect(pixels, rect, viewW, viewH, gridW, gridH, value) {
+    const x1 = Math.floor((rect.left / viewW) * gridW);
+    const y1 = Math.floor((rect.top / viewH) * gridH);
+    const x2 = Math.min(Math.ceil((rect.right / viewW) * gridW), gridW - 1);
+    const y2 = Math.min(Math.ceil((rect.bottom / viewH) * gridH), gridH - 1);
+
+    // Draw border only (outline)
+    for (let y = Math.max(0, y1); y <= y2; y++) {
+      for (let x = Math.max(0, x1); x <= x2; x++) {
+        if (y === y1 || y === y2 || x === x1 || x === x2) {
+          if (pixels[y] && pixels[y][x] !== undefined) {
+            pixels[y][x] = value;
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Convert a 2x4 pixel block to a Braille Unicode character
+   * Braille dot positions:
+   * 1 4
+   * 2 5
+   * 3 6
+   * 7 8
+   */
+  pixelsToBraille(pixels, startX, startY) {
+    // Braille dot bit positions
+    const dotBits = [
+      [0, 0, 0x01], // dot 1
+      [0, 1, 0x02], // dot 2
+      [0, 2, 0x04], // dot 3
+      [1, 0, 0x08], // dot 4
+      [1, 1, 0x10], // dot 5
+      [1, 2, 0x20], // dot 6
+      [0, 3, 0x40], // dot 7
+      [1, 3, 0x80]  // dot 8
+    ];
+
+    let charCode = 0x2800; // Braille base character
+
+    for (const [dx, dy, bit] of dotBits) {
+      const y = startY + dy;
+      const x = startX + dx;
+      if (pixels[y] && pixels[y][x]) {
+        charCode |= bit;
+      }
+    }
+
+    return String.fromCharCode(charCode);
+  }
+
+  /**
+   * Map element type to representative Braille character
+   */
+  typeToChar(type) {
+    const chars = {
+      1: '⣿', // header
+      2: '⣶', // nav
+      3: '⣤', // main
+      4: '⣴', // aside
+      5: '⣀', // footer
+      6: '⠿', // button
+      7: '⠗', // link
+      8: '⠶', // input
+      9: '⠻'  // image
+    };
+    return chars[type] || '⠀';
+  }
+
   // Helper methods
   
   isVisible(el) {

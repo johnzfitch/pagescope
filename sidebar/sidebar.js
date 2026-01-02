@@ -82,6 +82,10 @@ class SidebarUI {
     document.getElementById('export-text').addEventListener('click', () => {
       this.exportText();
     });
+
+    document.getElementById('export-braille').addEventListener('click', () => {
+      this.exportBraille();
+    });
   }
   
   switchTab(tabName) {
@@ -938,6 +942,110 @@ class SidebarUI {
     const a = document.createElement('a');
     a.href = url;
     a.download = `pagescope-text-${this.getFilename()}.txt`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  exportBraille() {
+    console.log('[PageScope] exportBraille called, data:', this.data ? 'present' : 'null');
+    if (!this.data) {
+      alert('No data to export. Please analyze a page first.');
+      return;
+    }
+
+    if (!this.data.brailleMap) {
+      alert('Braille map not available. Please refresh the page analysis.');
+      return;
+    }
+
+    const braille = this.data.brailleMap;
+    let text = '';
+
+    // Header
+    text += '═'.repeat(80) + '\n';
+    text += '             PAGESCOPE TACTILE PAGE MAP\n';
+    text += '═'.repeat(80) + '\n\n';
+
+    // Page info
+    text += `Page: ${this.cleanText(this.data.meta.title)}\n`;
+    text += `URL: ${this.data.meta.url}\n`;
+    text += `Exported: ${new Date().toISOString()}\n\n`;
+
+    // Legend
+    text += braille.legend + '\n\n';
+
+    // The Braille grid
+    text += '═'.repeat(80) + '\n';
+    text += '                    SPATIAL MAP (80x50 Braille)\n';
+    text += '═'.repeat(80) + '\n\n';
+    text += braille.grid + '\n\n';
+
+    // Zone details if available
+    if (braille.zones && braille.zones.length > 0) {
+      text += '═'.repeat(80) + '\n';
+      text += '                    DETECTED ZONES\n';
+      text += '═'.repeat(80) + '\n\n';
+
+      braille.zones.forEach((zone, idx) => {
+        const label = this.cleanText(zone.label) || '(unlabeled)';
+        text += `[${idx + 1}] ${zone.type.toUpperCase()}: ${label}\n`;
+        text += `    Position: (${zone.bounds.x}, ${zone.bounds.y}) Size: ${zone.bounds.w}x${zone.bounds.h}\n\n`;
+      });
+    }
+
+    // Text blocks (comments, posts) if available
+    if (this.data.textBlocks && this.data.textBlocks.length > 0) {
+      text += '═'.repeat(80) + '\n';
+      text += '                    TEXT CONTENT BLOCKS\n';
+      text += '═'.repeat(80) + '\n\n';
+
+      this.data.textBlocks.forEach((block, idx) => {
+        text += `--- Block ${idx + 1} (${block.wordCount} words) ---\n`;
+        // Wrap text at 78 chars
+        const words = block.text.split(/\s+/);
+        let line = '';
+        words.forEach(word => {
+          if (line.length + word.length + 1 > 78) {
+            text += line + '\n';
+            line = word;
+          } else {
+            line += (line ? ' ' : '') + word;
+          }
+        });
+        if (line) text += line + '\n';
+        text += '\n';
+      });
+    }
+
+    // Screen reader summary
+    text += '═'.repeat(80) + '\n';
+    text += '                    SCREEN READER SUMMARY\n';
+    text += '═'.repeat(80) + '\n\n';
+
+    text += `This page has:\n`;
+    text += `- ${this.data.structure.landmarks.length} landmarks (navigation regions)\n`;
+    text += `- ${this.data.structure.headings.length} headings\n`;
+    text += `- ${this.data.interactive.length} interactive elements\n`;
+    text += `- ${this.data.accessibility.issues.length} accessibility issues\n`;
+
+    if (this.data.textBlocks) {
+      text += `- ${this.data.textBlocks.length} text content blocks (comments, posts)\n`;
+    }
+
+    text += '\n';
+    text += 'The Braille map above shows the spatial layout of the page.\n';
+    text += 'Different Braille patterns indicate different content types:\n';
+    text += '- Dense patterns (⣿⣶) = structural elements like headers and navigation\n';
+    text += '- Medium patterns (⠿⠗) = interactive elements like buttons and links\n';
+    text += '- Light patterns (⠤⠒) = text content and forms\n';
+
+    const blob = new Blob([text], { type: 'text/plain; charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pagescope-braille-${this.getFilename()}.txt`;
     a.click();
 
     URL.revokeObjectURL(url);
