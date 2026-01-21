@@ -541,7 +541,7 @@ class SidebarUI {
       alert('No data to export. Please analyze a page first.');
       return;
     }
-    
+
     // Create organized, readable JSON structure
     const organized = {
       metadata: {
@@ -552,7 +552,7 @@ class SidebarUI {
         viewport: this.data.meta.viewport,
         exportedAt: new Date().toISOString()
       },
-      
+
       structure: {
         landmarks: this.data.structure.landmarks.map(l => ({
           type: l.type,
@@ -560,22 +560,29 @@ class SidebarUI {
           id: l.id,
           path: l.path
         })),
-        
+
         headings: this.data.structure.headings.map(h => ({
           level: h.level,
           text: h.text,
           id: h.id,
           path: h.path
         })),
-        
+
         sections: this.data.structure.sections.map(s => ({
           type: s.type,
           heading: s.heading,
           id: s.id,
-          wordCount: s.wordCount
+          wordCount: s.wordCount,
+          text: s.text,
+          articles: s.articles?.map(a => ({
+            heading: a.heading,
+            id: a.id,
+            wordCount: a.wordCount,
+            text: a.text
+          }))
         }))
       },
-      
+
       interactive: {
         count: this.data.interactive.length,
         elements: this.data.interactive.map(el => ({
@@ -590,7 +597,7 @@ class SidebarUI {
           path: el.path
         }))
       },
-      
+
       accessibility: {
         statistics: {
           landmarks: this.data.accessibility.stats.landmarks,
@@ -601,7 +608,7 @@ class SidebarUI {
             missingAltText: this.data.accessibility.stats.totalImages - this.data.accessibility.stats.altText
           }
         },
-        
+
         issues: {
           total: this.data.accessibility.issues.length,
           byType: this.groupIssuesByType(this.data.accessibility.issues),
@@ -613,18 +620,26 @@ class SidebarUI {
             path: issue.path
           }))
         }
-      }
+      },
+
+      // New comprehensive data fields
+      textBlocks: this.data.textBlocks || [],
+      semanticStructure: this.data.semanticStructure || {},
+      brailleMap: this.data.brailleMap || '',
+      agentBrief: this.data.agentBrief || {},
+      pageAnatomy: this.data.pageAnatomy || {},
+      attributedContent: this.data.attributedContent || {}
     };
-    
+
     const json = JSON.stringify(organized, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    
+
     const a = document.createElement('a');
     a.href = url;
     a.download = `pagescope-${this.getFilename()}.json`;
     a.click();
-    
+
     URL.revokeObjectURL(url);
   }
   
@@ -701,24 +716,54 @@ class SidebarUI {
           md += `### Section${section.heading ? ': ' + this.escapeMarkdown(section.heading) : ''}\n\n`;
           md += `- **Word Count:** ${section.wordCount}\n`;
           if (section.id) md += `- **ID:** \`${this.escapeCodeBlock(section.id)}\`\n`;
-          md += `- **Path:** \`${this.escapeCodeBlock(section.path)}\`\n`;
+          md += `- **Path:** \`${this.escapeCodeBlock(section.path)}\`\n\n`;
+
+          // Section text content
+          if (section.text && section.text.length > 0) {
+            const wrappedText = this.escapeMarkdown(section.text);
+            md += `${wrappedText}\n\n`;
+          }
 
           // Nested articles
           if (section.articles && section.articles.length > 0) {
-            md += `\n**Articles in this section:**\n\n`;
+            md += `**Articles in this section:**\n\n`;
             section.articles.forEach(article => {
-              md += `  - ${this.escapeMarkdown(article.heading || 'Untitled')} (${article.wordCount} words)\n`;
-              if (article.id) md += `    - ID: \`${this.escapeCodeBlock(article.id)}\`\n`;
-              md += `    - Path: \`${this.escapeCodeBlock(article.path)}\`\n`;
+              md += `#### ${this.escapeMarkdown(article.heading || 'Untitled')} (${article.wordCount} words)\n\n`;
+              if (article.id) md += `- **ID:** \`${this.escapeCodeBlock(article.id)}\`\n`;
+              md += `- **Path:** \`${this.escapeCodeBlock(article.path)}\`\n\n`;
+
+              // Article text content
+              if (article.text && article.text.length > 0) {
+                const wrappedText = this.escapeMarkdown(article.text);
+                md += `${wrappedText}\n\n`;
+              }
             });
           }
-          md += '\n';
         } else {
           // Standalone article
           md += `### Article: ${this.escapeMarkdown(section.heading || 'Untitled')}\n\n`;
           md += `- **Word Count:** ${section.wordCount}\n`;
           if (section.id) md += `- **ID:** \`${this.escapeCodeBlock(section.id)}\`\n`;
           md += `- **Path:** \`${this.escapeCodeBlock(section.path)}\`\n\n`;
+
+          // Article text content
+          if (section.text && section.text.length > 0) {
+            const wrappedText = this.escapeMarkdown(section.text);
+            md += `${wrappedText}\n\n`;
+          }
+        }
+      });
+    }
+
+    // Add extracted text blocks (especially useful for Shadow DOM content)
+    if (this.data.textBlocks && this.data.textBlocks.length > 0) {
+      md += `## Text Content (${this.data.textBlocks.length} blocks)\n\n`;
+
+      this.data.textBlocks.forEach((block, idx) => {
+        const cleanText = this.escapeMarkdown(block.text);
+        // Only show blocks with substantial content
+        if (block.wordCount >= 5) {
+          md += `${cleanText}\n\n`;
         }
       });
     }
@@ -824,116 +869,108 @@ class SidebarUI {
 
     let text = '';
 
-    // Page title and URL
-    const title = this.cleanText(this.data.meta.title);
-    text += `${title}\n`;
-    text += `${'='.repeat(title.length)}\n\n`;
-    text += `URL: ${this.data.meta.url}\n\n`;
+    // AGENT BRIEF HEADER
+    text += '╔' + '═'.repeat(78) + '╗\n';
+    text += '║' + '                         PAGESCOPE AGENT BRIEF'.padEnd(78) + '║\n';
+    text += '╚' + '═'.repeat(78) + '╝\n\n';
 
-    // Landmarks and their text content
-    const landmarks = this.data.structure.landmarks;
+    if (this.data.agentBrief) {
+      const brief = this.data.agentBrief;
 
-    landmarks.forEach(landmark => {
-      if (landmark.type === 'header' || landmark.type === 'banner') {
-        text += `[HEADER]\n`;
-        text += `${'-'.repeat(80)}\n`;
+      // Page classification
+      const typeStr = brief.pageSubType
+        ? `${brief.pageType} (${brief.pageSubType})`
+        : brief.pageType;
+      text += `PAGE TYPE: ${typeStr} [confidence: ${Math.round(brief.confidence * 100)}%]\n`;
+      text += `SITE: ${brief.site}\n`;
+      text += `URL: ${brief.url}\n\n`;
 
-        // Get header text from interactive elements (nav links, etc.)
-        const headerElements = this.data.interactive.filter(el =>
-          el.bounds.y < 150 && el.label
-        );
-        headerElements.slice(0, 10).forEach(el => {
-          text += `${this.cleanText(el.label)}\n`;
-        });
-        text += `\n`;
+      // Primary content
+      if (brief.primaryContent) {
+        text += 'PRIMARY CONTENT:\n';
+        if (brief.primaryContent.title) {
+          text += `  Title: "${this.cleanText(brief.primaryContent.title)}"\n`;
+        }
+        if (brief.primaryContent.author) {
+          text += `  Author: ${brief.primaryContent.author}\n`;
+        }
+        text += '\n';
       }
-    });
 
-    // Main content sections
-    const main = landmarks.find(l => l.type === 'main');
-    if (main) {
-      text += `[MAIN CONTENT]\n`;
-      text += `${'-'.repeat(80)}\n\n`;
-    }
+      // Engagement metrics
+      if (brief.engagement) {
+        const engParts = [];
+        if (brief.engagement.votes) engParts.push(`${brief.engagement.votes} votes`);
+        if (brief.engagement.comments) engParts.push(`${brief.engagement.comments} comments`);
+        if (engParts.length > 0) {
+          text += `ENGAGEMENT: ${engParts.join(', ')}\n\n`;
+        }
+      }
 
-    // Headings with hierarchy
-    if (this.data.structure.headings.length > 0) {
-      this.data.structure.headings.forEach(heading => {
-        const indent = '  '.repeat(heading.level - 1);
-        text += `${indent}${this.cleanText(heading.text)}\n`;
-      });
-      text += `\n`;
-    }
-
-    // Sections and articles with their text content
-    if (this.data.structure.sections.length > 0) {
-      text += `\n[SECTIONS]\n`;
-      text += `${'-'.repeat(80)}\n`;
-
-      this.data.structure.sections.forEach((section, idx) => {
-        if (section.type === 'section') {
-          // Section with potential nested articles
-          const heading = this.cleanText(section.heading || `Section ${idx + 1}`);
-          text += `\nSection: ${heading}\n`;
-          text += `  Word count: ${section.wordCount}\n`;
-
-          if (section.articles && section.articles.length > 0) {
-            text += `  Articles (${section.articles.length}):\n`;
-            section.articles.forEach(article => {
-              text += `    - ${this.cleanText(article.heading || 'Untitled')} (${article.wordCount} words)\n`;
-            });
-          }
+      // Available actions
+      if (brief.availableActions && brief.availableActions.length > 0) {
+        text += 'AVAILABLE ACTIONS:\n';
+        brief.availableActions.forEach(action => {
+          text += `  ✓ ${action.action}`;
+          if (action.destinations) text += ` → ${action.destinations} destinations`;
           text += '\n';
-        } else {
-          // Standalone article
-          const heading = this.cleanText(section.heading || `Article ${idx + 1}`);
-          text += `\nArticle: ${heading} (${section.wordCount} words)\n\n`;
+        });
+        text += '\n';
+      }
+
+      // Key elements summary
+      if (brief.keyElements) {
+        const elements = [];
+        if (brief.keyElements.hasComments) elements.push('comments');
+        if (brief.keyElements.hasMedia) elements.push('media');
+        if (brief.keyElements.hasImages) elements.push(`${brief.keyElements.hasImages} images`);
+        if (elements.length > 0) {
+          text += `KEY ELEMENTS: ${elements.join(', ')}\n\n`;
+        }
+      }
+    }
+
+    // PAGE ANATOMY
+    text += '═'.repeat(80) + '\n';
+    text += '                         PAGE ANATOMY\n';
+    text += '═'.repeat(80) + '\n\n';
+
+    if (this.data.pageAnatomy) {
+      const formatTree = (nodes, indent = '') => {
+        let output = '';
+        nodes.forEach(node => {
+          const desc = node.description ? ` "${this.cleanText(node.description).slice(0, 40)}"` : '';
+          output += `${indent}├─ [${node.role.toUpperCase()}]${desc} (${node.position}, ${node.size})\n`;
+          if (node.children && node.children.length > 0) {
+            output += formatTree(node.children, indent + '│  ');
+          }
+        });
+        return output;
+      };
+      text += formatTree(this.data.pageAnatomy.layout);
+      text += '\n';
+    }
+
+    // CONTENT EXTRACTION
+    text += '═'.repeat(80) + '\n';
+    text += '                         CONTENT EXTRACTION\n';
+    text += '═'.repeat(80) + '\n\n';
+
+    if (this.data.textBlocks && this.data.textBlocks.length > 0) {
+      this.data.textBlocks.forEach((block, idx) => {
+        if (block.wordCount >= 5) {
+          const cleanedText = this.cleanText(block.text);
+          text += this.wrapText(cleanedText, 80) + '\n\n';
         }
       });
     }
 
-    // Comments or interactive text (if detected)
-    const commentElements = this.data.interactive.filter(el =>
-      el.label && el.label.length > 50 // Likely comment or long text
-    );
-
-    if (commentElements.length > 0) {
-      text += `[COMMENTS / INTERACTIVE TEXT]\n`;
-      text += `${'-'.repeat(80)}\n\n`;
-
-      commentElements.forEach((el, idx) => {
-        text += `Comment ${idx + 1}:\n`;
-        const cleanedLabel = this.cleanText(el.label);
-
-        // Wrap long comments at 80 characters
-        const words = cleanedLabel.split(' ');
-        let line = '';
-        words.forEach(word => {
-          if (line.length + word.length + 1 > 80) {
-            if (line) text += `${line}\n`;
-            line = word;
-          } else {
-            line += (line ? ' ' : '') + word;
-          }
-        });
-        if (line) text += `${line}\n`;
-        text += `\n`;
-      });
-    }
-
-    // Footer
-    const footer = landmarks.find(l => l.type === 'footer' || l.type === 'contentinfo');
-    if (footer) {
-      text += `[FOOTER]\n`;
-      text += `${'-'.repeat(80)}\n`;
-
-      const footerLinks = this.data.interactive.filter(el =>
-        el.role === 'link' && el.bounds.y > this.data.meta.viewport.height * 0.85
-      );
-
-      footerLinks.slice(0, 10).forEach(link => {
-        if (link.label) text += `${this.cleanText(link.label)}\n`;
-      });
+    // TACTILE MAP (BRAILLE)
+    if (this.data.brailleMap) {
+      text += '═'.repeat(80) + '\n';
+      text += '                         TACTILE MAP (Braille - Ambient)\n';
+      text += '═'.repeat(80) + '\n\n';
+      text += this.data.brailleMap + '\n\n';
     }
 
     const blob = new Blob([text], { type: 'text/plain' });
@@ -941,7 +978,7 @@ class SidebarUI {
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pagescope-text-${this.getFilename()}.txt`;
+    a.download = `pagescope-agent-${this.getFilename()}.txt`;
     a.click();
 
     URL.revokeObjectURL(url);
@@ -1141,17 +1178,7 @@ class SidebarUI {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // SECTION 4: ASCII BOUNDARY MAP (Visual Layout)
-    // ═══════════════════════════════════════════════════════════════════════════════
-    if (this.data.asciiMap) {
-      text += '═'.repeat(80) + '\n';
-      text += '                         SPATIAL MAP (ASCII)\n';
-      text += '═'.repeat(80) + '\n\n';
-      text += this.data.asciiMap.map + '\n\n';
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // SECTION 5: BRAILLE TACTILE MAP (Ambient)
+    // SECTION 4: BRAILLE TACTILE MAP (Ambient)
     // ═══════════════════════════════════════════════════════════════════════════════
     if (this.data.brailleMap) {
       text += '═'.repeat(80) + '\n';
@@ -1166,7 +1193,7 @@ class SidebarUI {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // SECTION 6: SEMANTIC STRUCTURE (Accessibility Tree)
+    // SECTION 5: SEMANTIC STRUCTURE (Accessibility Tree)
     // ═══════════════════════════════════════════════════════════════════════════════
     if (this.data.semanticStructure) {
       const sem = this.data.semanticStructure;
@@ -1257,7 +1284,7 @@ class SidebarUI {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // SECTION 7: MACHINE-READABLE (JSON)
+    // SECTION 6: MACHINE-READABLE (JSON)
     // ═══════════════════════════════════════════════════════════════════════════════
     text += '═'.repeat(80) + '\n';
     text += '                         MACHINE-READABLE (JSON)\n';

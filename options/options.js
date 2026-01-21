@@ -14,35 +14,28 @@ class OptionsUI {
   
   async loadSettings() {
     const settings = await browser.storage.local.get({
-      autoRefresh: false,
-      mcpEnabled: false
+      autoRefresh: false
     });
-    
-    document.getElementById('auto-refresh').checked = settings.autoRefresh;
-    document.getElementById('mcp-enabled').checked = settings.mcpEnabled;
-    
-    this.toggleMCPSetup(settings.mcpEnabled);
+
+    const autoRefreshEl = document.getElementById('auto-refresh');
+    if (autoRefreshEl) {
+      autoRefreshEl.checked = settings.autoRefresh;
+    }
   }
-  
+
   setupEventListeners() {
-    document.getElementById('mcp-enabled').addEventListener('change', (e) => {
-      this.toggleMCPSetup(e.target.checked);
-    });
-    
-    document.getElementById('save').addEventListener('click', () => {
-      this.saveSettings();
-    });
+    const saveBtn = document.getElementById('save');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        this.saveSettings();
+      });
+    }
   }
-  
-  toggleMCPSetup(enabled) {
-    const setup = document.getElementById('mcp-setup');
-    setup.style.display = enabled ? 'block' : 'none';
-  }
-  
+
   async saveSettings() {
+    const autoRefreshEl = document.getElementById('auto-refresh');
     const settings = {
-      autoRefresh: document.getElementById('auto-refresh').checked,
-      mcpEnabled: document.getElementById('mcp-enabled').checked
+      autoRefresh: autoRefreshEl ? autoRefreshEl.checked : false
     };
     
     try {

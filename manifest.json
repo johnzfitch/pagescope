@@ -52,10 +52,6 @@
     }
   },
 
-  "data_collection_permissions": {
-    "required": false
-  },
-
   "developer": {
     "name": "Zack",
     "url": "https://github.com/johnzfitch/pagescope"

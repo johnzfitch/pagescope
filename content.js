@@ -6,6 +6,8 @@
 class PageScope {
   constructor() {
     this.data = null;
+    this.messageListener = null;
+    this.cleanupHandlers = [];
   }
   
   /**
@@ -25,8 +27,7 @@ class PageScope {
       // Agent-focused data
       agentBrief: this.getAgentBrief(),
       pageAnatomy: this.getPageAnatomy(),
-      attributedContent: this.getAttributedContent(),
-      asciiMap: this.getAsciiMap()
+      attributedContent: this.getAttributedContent()
     };
   }
   
@@ -242,56 +243,85 @@ class PageScope {
   }
 
   /**
-   * Extract text blocks - captures comments, posts, and other text content
-   * that may not use semantic HTML tags
+   * Extract text blocks - comprehensive text extraction including shadow DOM
+   * Based on query-selector-shadow-dom's collectAllElementsDeep algorithm
    */
   getTextBlocks() {
     const blocks = [];
-    const MIN_WORDS = 3; // Lowered to catch short comments
     const seen = new Set();
+    const MIN_WORDS = 3;
 
-    // Find elements with substantial text content
-    // Added Digg-specific selectors and common comment patterns
-    const candidates = document.querySelectorAll(`
-      p, blockquote, li, td,
-      [class*="comment"], [class*="post"], [class*="content"], [class*="text"], [class*="body"],
-      [data-testid*="comment"], [data-testid*="post"],
-      .tiptap, .ProseMirror,
-      [class*="rt-Text"], [class*="rt-Flex"],
-      div[id^="radix-"] > div,
-      section[class*="flex"] > div[class*="flex"] > div
-    `);
+    // Recursively collect all elements including those in shadow DOM
+    // Based on collectAllElementsDeep from query-selector-shadow-dom
+    const collectAllElementsDeep = (root = document.body) => {
+      const allElements = [];
 
-    candidates.forEach((el, idx) => {
+      const findAllElements = (nodes) => {
+        for (let i = 0; i < nodes.length; i++) {
+          const el = nodes[i];
+          allElements.push(el);
+          // If the element has a shadow root, dig deeper
+          if (el.shadowRoot) {
+            findAllElements(el.shadowRoot.querySelectorAll('*'));
+          }
+        }
+      };
+
+      if (root.shadowRoot) {
+        findAllElements(root.shadowRoot.querySelectorAll('*'));
+      }
+      findAllElements(root.querySelectorAll('*'));
+
+      return allElements;
+    };
+
+    // Collect all elements including shadow DOM
+    const allElements = collectAllElementsDeep();
+
+    // Filter to text-bearing elements
+    const textElements = allElements.filter(el => {
+      const tag = el.tagName?.toLowerCase();
+      return tag && ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'li', 'td', 'th',
+                     'div', 'span', 'article', 'section', 'pre', 'code', 'a'].includes(tag);
+    });
+
+    textElements.forEach((el, idx) => {
+      // Only process visible elements
       if (!this.isVisible(el)) return;
 
-      // Skip if parent already captured (avoid duplicates)
+      // Skip script/style/noscript
+      if (el.closest('script, style, noscript')) return;
+
+      // Get ALL text content from element
       const text = el.textContent?.trim() || '';
-      if (seen.has(text) || text.length < 10) return; // Lowered min length
 
-      // Count words
-      const words = text.match(/\b\w+\b/g) || [];
-      if (words.length < MIN_WORDS) return;
+      if (!text || text.length < 10) return;
 
-      // Skip if mostly code/script content
-      if (el.closest('script, style, code, pre, noscript')) return;
-
-      // Skip navigation/UI elements
-      if (el.closest('nav, header, footer') && words.length < 20) return;
-
-      const rect = el.getBoundingClientRect();
-
-      // Check if this text is contained in an already-added block
-      let isNested = false;
-      for (const block of blocks) {
-        if (text.includes(block.text) || block.text.includes(text)) {
-          if (text.length <= block.text.length) {
-            isNested = true;
+      // Check if this is a duplicate (nested element with same text)
+      let isDuplicate = false;
+      for (const existingText of seen) {
+        if (existingText.includes(text) || text.includes(existingText)) {
+          // If this text is longer, replace the existing one
+          if (text.length > existingText.length) {
+            seen.delete(existingText);
+            // Remove the shorter block
+            const shortIndex = blocks.findIndex(b => b.text === existingText);
+            if (shortIndex >= 0) {
+              blocks.splice(shortIndex, 1);
+            }
+          } else {
+            isDuplicate = true;
             break;
           }
         }
       }
-      if (isNested) return;
+
+      if (isDuplicate) return;
+
+      const words = text.match(/\b\w+\b/g) || [];
+      if (words.length < MIN_WORDS) return;
+
+      const rect = el.getBoundingClientRect();
 
       seen.add(text);
       blocks.push({
@@ -311,9 +341,32 @@ class PageScope {
     });
 
     // Sort by vertical position (reading order)
-    blocks.sort((a, b) => a.bounds.y - b.bounds.y);
+    blocks.sort((a, b) => (a.bounds?.y || 0) - (b.bounds?.y || 0));
 
-    return blocks.slice(0, 100); // Limit to prevent huge exports
+    // Remove duplicates and nested content
+    const filtered = [];
+    for (const block of blocks) {
+      let isDuplicate = false;
+      for (const existing of filtered) {
+        if (existing.text.includes(block.text) || block.text.includes(existing.text)) {
+          if (block.text.length <= existing.text.length) {
+            isDuplicate = true;
+            break;
+          } else {
+            // Replace with longer version
+            const idx = filtered.indexOf(existing);
+            filtered[idx] = block;
+            isDuplicate = true;
+            break;
+          }
+        }
+      }
+      if (!isDuplicate) {
+        filtered.push(block);
+      }
+    }
+
+    return filtered.slice(0, 100);
   }
 
   /**
@@ -1035,6 +1088,24 @@ class PageScope {
     const title = document.title.toLowerCase();
     const body = document.body;
 
+    // Check for AI Studio first (high confidence detection)
+    const aiStudioTurns = document.querySelectorAll('[data-turn-role]');
+    const hasAIStudio = aiStudioTurns.length > 0 ||
+                        !!document.querySelector('ms-chat-turn, ms-text-chunk, ms-chunk-editor') ||
+                        url.includes('aistudio.google.com');
+
+    if (hasAIStudio) {
+      return {
+        type: 'ai-chat',
+        subType: 'google-ai-studio',
+        confidence: 0.95,
+        signals: {
+          turnCount: aiStudioTurns.length,
+          hasAIStudio: true
+        }
+      };
+    }
+
     // Detection signals
     const signals = {
       hasComments: !!document.querySelector('[class*="comment"], [data-testid*="comment"], #comments'),
@@ -1540,10 +1611,87 @@ class PageScope {
   }
 
   /**
+   * Extract AI Studio chat conversation content
+   */
+  extractAIStudioContent(turns) {
+    const content = [];
+
+    // Get conversation title from page
+    const titleEl = document.querySelector('ms-chunk-editor, [class*="title"], h1');
+    const title = titleEl?.textContent?.trim()?.replace(/^menu\s*/, '')?.split(/\s*edit\s*/)[0]?.trim();
+
+    if (title) {
+      content.push({
+        type: 'conversation',
+        title: title,
+        platform: 'Google AI Studio',
+        turnCount: turns.length
+      });
+    }
+
+    turns.forEach(function(turn, index) {
+      var role = turn.getAttribute('data-turn-role');
+
+      // Find text content - try ms-text-chunk first, then ms-cmark-node, then raw text
+      var textChunks = turn.querySelectorAll('ms-text-chunk');
+      var text = '';
+
+      if (textChunks.length > 0) {
+        text = Array.from(textChunks).map(function(chunk) {
+          return chunk.textContent?.trim() || '';
+        }).join('\n\n');
+      } else {
+        // Fallback to direct text, excluding UI elements
+        var clone = turn.cloneNode(true);
+        // Remove button text, icons
+        clone.querySelectorAll('button, [class*="icon"], mat-icon').forEach(function(el) {
+          el.remove();
+        });
+        text = clone.textContent?.trim() || '';
+      }
+
+      // Clean up common UI artifacts
+      text = text.replace(/^(edit|more_vert|Model Thoughts)\s*/g, '').trim();
+
+      // Skip empty turns
+      if (!text || text.length < 5) return;
+
+      // Extract code blocks
+      var codeBlocks = [];
+      turn.querySelectorAll('pre, code, [class*="code-block"]').forEach(function(code) {
+        var codeText = code.textContent?.trim();
+        if (codeText && codeText.length > 10) {
+          codeBlocks.push({
+            language: code.className?.match(/language-(\w+)/)?.[1] || 'unknown',
+            code: codeText.slice(0, 2000)
+          });
+        }
+      });
+
+      content.push({
+        type: 'chat-turn',
+        index: index,
+        role: role,
+        text: text.slice(0, 5000),
+        hasCode: codeBlocks.length > 0,
+        codeBlocks: codeBlocks.length > 0 ? codeBlocks : undefined
+      });
+    });
+
+    return content;
+  }
+
+  /**
    * Extract content with full attribution
    */
   getAttributedContent() {
     const content = [];
+
+    // Check for AI Studio chat interface first
+    const aiStudioTurns = document.querySelectorAll('[data-turn-role]');
+    if (aiStudioTurns.length > 0) {
+      return this.extractAIStudioContent(aiStudioTurns);
+    }
 
     // Find comment-like structures
     const commentSelectors = [
@@ -1631,119 +1779,45 @@ class PageScope {
   }
 
   /**
-   * Generate ASCII boundary map showing page regions
+   * Cleanup all resources to prevent memory leaks
    */
-  getAsciiMap() {
-    const COLS = 60;
-    const ROWS = 30;
-    const viewW = window.innerWidth;
-    const viewH = window.innerHeight;
+  cleanup() {
+    // Remove all highlight overlays
+    document.querySelectorAll('.pagescope-highlight').forEach(el => el.remove());
 
-    // Create character grid
-    const grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(' '));
+    // Remove message listener
+    if (this.messageListener) {
+      browser.runtime.onMessage.removeListener(this.messageListener);
+      this.messageListener = null;
+    }
 
-    // Region data for labeling
-    const regions = [];
+    // Run any registered cleanup handlers
+    this.cleanupHandlers.forEach(fn => fn());
+    this.cleanupHandlers = [];
 
-    // Helper to draw box
-    const drawBox = (x1, y1, x2, y2, label, fill = ' ') => {
-      // Clamp coordinates
-      x1 = Math.max(0, Math.min(COLS - 1, x1));
-      x2 = Math.max(0, Math.min(COLS - 1, x2));
-      y1 = Math.max(0, Math.min(ROWS - 1, y1));
-      y2 = Math.max(0, Math.min(ROWS - 1, y2));
+    // Clear data to free memory
+    this.data = null;
 
-      if (x2 - x1 < 2 || y2 - y1 < 1) return;
-
-      // Top border
-      grid[y1][x1] = '┌';
-      grid[y1][x2] = '┐';
-      for (let x = x1 + 1; x < x2; x++) grid[y1][x] = '─';
-
-      // Bottom border
-      if (y2 < ROWS) {
-        grid[y2][x1] = '└';
-        grid[y2][x2] = '┘';
-        for (let x = x1 + 1; x < x2; x++) grid[y2][x] = '─';
-      }
-
-      // Side borders
-      for (let y = y1 + 1; y < y2; y++) {
-        grid[y][x1] = '│';
-        grid[y][x2] = '│';
-        // Fill interior
-        if (fill !== ' ') {
-          for (let x = x1 + 1; x < x2; x++) {
-            if (grid[y][x] === ' ') grid[y][x] = fill;
-          }
-        }
-      }
-
-      // Add label if fits
-      if (label && x2 - x1 > label.length + 2) {
-        const labelX = x1 + 2;
-        const labelY = y1 + 1;
-        if (labelY < ROWS - 1) {
-          for (let i = 0; i < label.length && labelX + i < x2; i++) {
-            grid[labelY][labelX + i] = label[i];
-          }
-        }
-      }
-
-      regions.push({ label, x1, y1, x2, y2 });
-    };
-
-    // Map coordinates
-    const mapX = (px) => Math.floor((px / viewW) * COLS);
-    const mapY = (py) => Math.floor((py / viewH) * ROWS);
-
-    // Draw major landmarks
-    const landmarkConfig = [
-      { selector: 'header, [role="banner"]', label: 'HEADER', fill: '▓' },
-      { selector: 'nav, [role="navigation"]', label: 'NAV', fill: '░' },
-      { selector: 'main, [role="main"]', label: 'MAIN', fill: '·' },
-      { selector: 'aside, [role="complementary"]', label: 'SIDE', fill: '░' },
-      { selector: 'footer, [role="contentinfo"]', label: 'FOOTER', fill: '▓' },
-      { selector: 'article, [role="article"]', label: 'ARTICLE', fill: ' ' },
-      { selector: '[class*="comment"]', label: 'COMMENTS', fill: ' ' },
-      { selector: 'form', label: 'FORM', fill: '·' }
-    ];
-
-    landmarkConfig.forEach(({ selector, label, fill }) => {
-      const el = document.querySelector(selector);
-      if (!el || !this.isVisible(el)) return;
-
-      const rect = el.getBoundingClientRect();
-      const x1 = mapX(rect.left);
-      const y1 = mapY(rect.top);
-      const x2 = mapX(rect.right);
-      const y2 = mapY(rect.bottom);
-
-      drawBox(x1, y1, x2, y2, label, fill);
-    });
-
-    // Convert to string
-    const lines = grid.map(row => row.join(''));
-
-    return {
-      map: lines.join('\n'),
-      width: COLS,
-      height: ROWS,
-      regions
-    };
+    console.log('PageScope cleaned up - memory freed');
   }
 }
 
-// Initialize and listen for messages
-const pageScope = new PageScope();
+// Initialize
+let pageScope = new PageScope();
 
 console.log('PageScope content script loaded');
 
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+// Create message listener with proper reference for cleanup
+pageScope.messageListener = (message, sender, sendResponse) => {
   console.log('PageScope received message:', message);
 
   if (message.action === 'extract') {
     try {
+      // Clear old data before extracting new to prevent accumulation
+      if (pageScope.data) {
+        pageScope.data = null;
+      }
+
       const data = pageScope.extract();
       console.log('PageScope extracted data:', data);
       sendResponse(data);
@@ -1769,7 +1843,21 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   return false; // Didn't handle this message
-});
+};
+
+// Register the listener
+browser.runtime.onMessage.addListener(pageScope.messageListener);
+
+// Cleanup on page navigation/unload
+window.addEventListener('pagehide', () => {
+  console.log('PageScope: page hiding, cleaning up to prevent memory leaks');
+  pageScope.cleanup();
+}, { once: true, capture: true });
+
+// Also cleanup on beforeunload as safety net
+window.addEventListener('beforeunload', () => {
+  pageScope.cleanup();
+}, { once: true });
 
 function highlightElements(elementIds) {
   // Remove existing highlights
