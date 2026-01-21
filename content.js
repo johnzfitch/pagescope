@@ -339,6 +339,38 @@ class PageScope {
     const seen = new Set();
     const MIN_WORDS = 3;
 
+    // SPECIAL HANDLING: AI Studio chat content (closed shadow roots)
+    // AI Studio uses custom elements with closed shadow roots, but textContent still works
+    const chatElements = document.querySelectorAll('[data-turn-role], ms-chat-turn, ms-text-chunk');
+    chatElements.forEach((el, idx) => {
+      const text = el.textContent?.trim() || '';
+      if (text && text.length >= 10) {
+        const words = text.match(/\b\w+\b/g) || [];
+        if (words.length >= MIN_WORDS) {
+          const rect = el.getBoundingClientRect();
+          const role = el.getAttribute('data-turn-role') || 'assistant';
+
+          blocks.push({
+            id: `chat-${idx}`,
+            text: text.slice(0, 5000), // Larger limit for chat messages
+            wordCount: words.length,
+            role: role.toLowerCase(), // 'user' or 'model'
+            bounds: {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height)
+            },
+            path: this.getPath(el),
+            tag: el.tagName.toLowerCase(),
+            className: el.className?.toString().slice(0, 100) || '',
+            type: 'chat-message'
+          });
+          seen.add(text);
+        }
+      }
+    });
+
     // Recursively collect all elements including those in shadow DOM
     // Based on collectAllElementsDeep from query-selector-shadow-dom
     // STEALTH: Use try-catch to silently handle blocked shadow roots
