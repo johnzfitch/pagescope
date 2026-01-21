@@ -92,11 +92,15 @@ class PageScope {
 
   /**
    * Extract complete page structure
+   * @param {Object} options - Extraction options
+   * @param {string} options.brailleResolution - Resolution for Braille map
    * @returns {Object} Structured page data
    */
-  extract() {
+  extract(options = {}) {
     // Clear query cache at start of extraction
     this.queryCache.clear();
+
+    const brailleResolution = options.brailleResolution || 'standard';
 
     return {
       meta: this.getMetadata(),
@@ -105,7 +109,7 @@ class PageScope {
       accessibility: this.getAccessibility(),
       viewport: this.getViewportInfo(),
       textBlocks: this.getTextBlocks(),
-      brailleMap: this.getBrailleMap(),
+      brailleMap: this.getBrailleMap(brailleResolution),
       semanticStructure: this.getSemanticStructure(),
       // Agent-focused data
       agentBrief: this.getAgentBrief(),
@@ -471,10 +475,30 @@ class PageScope {
    * Generate a Braille spatial map with semantic zone awareness
    * Uses Unicode Braille patterns (U+2800-U+28FF) to create a tactile wireframe
    * Inspired by semantic zone upscaling - different content types get different patterns
+   *
+   * Resolution guidelines (based on empirical testing):
+   * - 80x50 (~4000 chars): Full detail, high fidelity inspection
+   * - 40x10 (~400 chars, ~140 tokens): Clear app type, regions, density
+   * - 30x8 (~240 chars, ~90 tokens): RECOMMENDED for ambient awareness
+   * - 25x6 (~150 chars, ~60 tokens): Compact, still functional
+   * - 20x5 (~100 chars, ~40 tokens): MINIMUM viable for layout detection
+   * - Below 15x4: Information degradation, not useful
+   *
+   * @param {string} resolution - 'full'|'high'|'standard'|'compact'|'minimal'
    */
-  getBrailleMap() {
-    const COLS = 80;  // Characters wide
-    const ROWS = 50;  // Characters tall (more rows for detail)
+  getBrailleMap(resolution = 'standard') {
+    // Resolution presets based on empirical threshold testing
+    const presets = {
+      full: { cols: 80, rows: 50 },      // ~4000 chars - Full detail
+      high: { cols: 40, rows: 10 },      // ~400 chars - Clear identification
+      standard: { cols: 30, rows: 8 },   // ~240 chars - RECOMMENDED ambient
+      compact: { cols: 25, rows: 6 },    // ~150 chars - Token-constrained
+      minimal: { cols: 20, rows: 5 }     // ~100 chars - MINIMUM viable
+    };
+
+    const config = presets[resolution] || presets.standard;
+    const COLS = config.cols;
+    const ROWS = config.rows;
     const CELL_W = 2; // Braille cell is 2 dots wide
     const CELL_H = 4; // Braille cell is 4 dots tall
 
@@ -1916,7 +1940,9 @@ pageScope.messageListener = (message, sender, sendResponse) => {
         pageScope.data = null;
       }
 
-      const data = pageScope.extract();
+      // Pass through extraction options (e.g., brailleResolution)
+      const options = message.options || {};
+      const data = pageScope.extract(options);
       console.log('PageScope extracted data:', data);
       sendResponse(data);
       return true; // Keep message channel open

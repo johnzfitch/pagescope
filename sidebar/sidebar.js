@@ -131,9 +131,17 @@ class SidebarUI {
       // Small delay to ensure content script is ready
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      console.log('[PageScope] Sending extract message...');
+      // Load user settings for extraction options
+      const settings = await browser.storage.local.get({
+        brailleResolution: 'standard'
+      });
+
+      console.log('[PageScope] Sending extract message with options:', settings);
       this.data = await browser.tabs.sendMessage(tab.id, {
-        action: 'extract'
+        action: 'extract',
+        options: {
+          brailleResolution: settings.brailleResolution
+        }
       });
       
       if (!this.data) {
