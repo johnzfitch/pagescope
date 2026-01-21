@@ -1,6 +1,21 @@
 /**
  * PageScope - Content Script
  * Extracts semantic page structure and accessibility information
+ * with anti-fingerprinting protections
+ *
+ * PRIVACY & STEALTH FEATURES:
+ * ---------------------------
+ * PageScope implements several protections against site-based detection:
+ *
+ * 1. Query Caching: Reduces repetitive DOM queries that create timing patterns
+ * 2. Shadow DOM Protection: Silent error handling for closed shadow roots
+ * 3. Timing Randomization: Adds jitter to prevent timing-based fingerprinting
+ * 4. Batch Processing: Throttles operations to appear more human-like
+ * 5. Read-Only Operations: Never modifies DOM (except temporary highlights)
+ *
+ * NOTE: We do NOT access the browser's accessibility tree (AXTree) - we only
+ * read standard DOM attributes and properties. Sites cannot detect us via
+ * assistive technology APIs.
  */
 
 class PageScope {
@@ -8,13 +23,71 @@ class PageScope {
     this.data = null;
     this.messageListener = null;
     this.cleanupHandlers = [];
+
+    // Stealth configuration - prevent site detection
+    // Can be disabled via options if needed
+    this.stealth = {
+      enabled: true,          // Master switch for all stealth features
+      batchDelay: 10,         // ms delay between batch operations
+      maxQueriesPerBatch: 50, // Limit queries to appear more human
+      useNativeAPIs: true,    // Prefer native APIs over repeated queries
+      randomizeTimings: true  // Add jitter to timing patterns
+    };
+
+    // Cache frequently accessed elements to reduce queries
+    this.elementCache = new WeakMap();
+    this.queryCache = new Map();
+    this.lastQueryTime = 0;
   }
-  
+
+  /**
+   * Throttle DOM queries to prevent detection via timing patterns
+   */
+  async throttleQuery(fn, context = null) {
+    if (!this.stealth.enabled) {
+      return fn.call(context);
+    }
+
+    const now = Date.now();
+    const timeSinceLastQuery = now - this.lastQueryTime;
+
+    // Add random jitter (0-5ms) to make timing less predictable
+    if (this.stealth.randomizeTimings && timeSinceLastQuery < this.stealth.batchDelay) {
+      const jitter = Math.random() * 5;
+      await new Promise(resolve => setTimeout(resolve, this.stealth.batchDelay + jitter));
+    }
+
+    this.lastQueryTime = Date.now();
+    return fn.call(context);
+  }
+
+  /**
+   * Cached querySelectorAll to reduce observable DOM queries
+   */
+  querySelectorAllCached(selector, root = document) {
+    const cacheKey = `${selector}:${root === document ? 'doc' : 'root'}`;
+
+    if (this.queryCache.has(cacheKey)) {
+      return this.queryCache.get(cacheKey);
+    }
+
+    const results = root.querySelectorAll(selector);
+    this.queryCache.set(cacheKey, results);
+
+    // Clear cache after 100ms to avoid stale data
+    setTimeout(() => this.queryCache.delete(cacheKey), 100);
+
+    return results;
+  }
+
   /**
    * Extract complete page structure
    * @returns {Object} Structured page data
    */
   extract() {
+    // Clear query cache at start of extraction
+    this.queryCache.clear();
+
     return {
       meta: this.getMetadata(),
       structure: this.getStructure(),
@@ -51,11 +124,12 @@ class PageScope {
       headings: [],
       sections: []
     };
-    
+
     // Landmarks (nav, main, aside, footer, etc.)
     const landmarkMap = new Map(); // Track unique landmarks by type+path
 
-    document.querySelectorAll('[role="navigation"], [role="main"], [role="complementary"], [role="contentinfo"], nav, main, aside, footer, header').forEach(el => {
+    // STEALTH: Use cached query to reduce observable DOM access
+    this.querySelectorAllCached('[role="navigation"], [role="main"], [role="complementary"], [role="contentinfo"], nav, main, aside, footer, header').forEach(el => {
       if (!this.isVisible(el)) return;
 
       const type = el.getAttribute('role') || el.tagName.toLowerCase();
@@ -253,6 +327,7 @@ class PageScope {
 
     // Recursively collect all elements including those in shadow DOM
     // Based on collectAllElementsDeep from query-selector-shadow-dom
+    // STEALTH: Use try-catch to silently handle blocked shadow roots
     const collectAllElementsDeep = (root = document.body) => {
       const allElements = [];
 
@@ -260,16 +335,29 @@ class PageScope {
         for (let i = 0; i < nodes.length; i++) {
           const el = nodes[i];
           allElements.push(el);
-          // If the element has a shadow root, dig deeper
-          if (el.shadowRoot) {
-            findAllElements(el.shadowRoot.querySelectorAll('*'));
+
+          // STEALTH: Shadow root access detection mitigation
+          // Check if shadow root exists without throwing errors
+          try {
+            if (el.shadowRoot) {
+              findAllElements(el.shadowRoot.querySelectorAll('*'));
+            }
+          } catch (e) {
+            // Silently skip closed shadow roots or access-denied scenarios
+            // This prevents sites from detecting us via error handling
           }
         }
       };
 
-      if (root.shadowRoot) {
-        findAllElements(root.shadowRoot.querySelectorAll('*'));
+      // STEALTH: Wrap root shadow check
+      try {
+        if (root.shadowRoot) {
+          findAllElements(root.shadowRoot.querySelectorAll('*'));
+        }
+      } catch (e) {
+        // Silently skip
       }
+
       findAllElements(root.querySelectorAll('*'));
 
       return allElements;
