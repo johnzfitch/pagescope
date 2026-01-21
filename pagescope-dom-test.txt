@@ -1,0 +1,308 @@
+21:59:56.854 AI Studio Turn Analysis: content.js:425:21
+21:59:56.854 Data Attributes: content.js:437:17
+21:59:56.859 console.table() content.js:445:17
+(index)	attr	count
+0	data-test-id	15
+1	data-turn-role	10
+2	data-a	6
+3	data-disabled	3
+4	data-id	1
+5	data-font-stylesheet	1
+6	data-glue-cookie-notification-bar-category	1
+7	data-glue-cookie-notification-bar-site-id	1
+8	data-test-view-all-history-link	1
+9	data-test-compare	1
+10	data-test-clear	1
+11	data-test	1
+12	data-test-get-code	1
+13	data-test-system-instructions-card	1
+14	data-scope-id	1
+21:59:56.859 Framework: content.js:448:17
+21:59:56.860 React: false | Angular: true | Vue: false content.js:452:17
+21:59:58.476 [CT] Action: run-dom content.js:492:17
+21:59:58.476 === DOM ANALYZER === content.js:386:17
+21:59:58.476 Selector Results: content.js:407:17
+21:59:58.477 console.table() content.js:421:17
+(index)	selector	count	sample
+0	ms-chat-turn	10	MS-CHAT-TURN.ng-star-inserted
+1	ms-text-chunk	5	MS-TEXT-CHUNK.ng-star-inserted
+2	mat-expansion-panel	10	MAT-EXPANSION-PANEL.mat-expansion-panel
+3	[class*="prompt"]	28	LI.mat-mdc-tooltip-trigger
+4	[class*="response"]	2	BUTTON.mat-mdc-tooltip-trigger
+21:59:58.477 AI Studio Turn Analysis: content.js:425:21
+21:59:58.477 Data Attributes: content.js:437:17
+21:59:58.482 console.table() content.js:445:17
+(index)	attr	count
+0	data-test-id	15
+1	data-turn-role	10
+2	data-a	6
+3	data-disabled	3
+4	data-id	1
+5	data-font-stylesheet	1
+6	data-glue-cookie-notification-bar-category	1
+7	data-glue-cookie-notification-bar-site-id	1
+8	data-test-view-all-history-link	1
+9	data-test-compare	1
+10	data-test-clear	1
+11	data-test	1
+12	data-test-get-code	1
+13	data-test-system-instructions-card	1
+14	data-scope-id	1
+21:59:58.482 Framework: content.js:448:17
+21:59:58.482 React: false | Angular: true | Vue: false content.js:452:17
+21:59:58.869 GET
+https://lh3.googleusercontent.com/drive-storage/AJQWtBNir7jrj0sEfScu6Ac5YTfWCw8-dz5-XFpjbYJ04hUTdaBFyaw8UZ3WURfPw0PG2y7MHACdO_B9HgQPlj9ERcHXAs2nV3R75-t_SmBQd3IUvxmOeA
+[HTTP/1.1 200 OK 0ms]
+
+22:00:00.827 [CT] Action: run-dom content.js:492:17
+22:00:00.827 === DOM ANALYZER === content.js:386:17
+22:00:00.828 Selector Results: content.js:407:17
+22:00:00.828 console.table() content.js:421:17
+(index)	selector	count	sample
+0	ms-chat-turn	10	MS-CHAT-TURN.ng-star-inserted
+1	ms-text-chunk	5	MS-TEXT-CHUNK.ng-star-inserted
+2	mat-expansion-panel	10	MAT-EXPANSION-PANEL.mat-expansion-panel
+3	[class*="prompt"]	28	LI.mat-mdc-tooltip-trigger
+4	[class*="response"]	2	BUTTON.mat-mdc-tooltip-trigger
+22:00:00.829 AI Studio Turn Analysis: content.js:425:21
+22:00:00.829 Data Attributes: content.js:437:17
+22:00:00.833 console.table() content.js:445:17
+(index)	attr	count
+0	data-test-id	15
+1	data-turn-role	10
+2	data-a	6
+3	data-disabled	3
+4	data-id	1
+5	data-font-stylesheet	1
+6	data-glue-cookie-notification-bar-category	1
+7	data-glue-cookie-notification-bar-site-id	1
+8	data-test-view-all-history-link	1
+9	data-test-compare	1
+10	data-test-clear	1
+11	data-mat-icon-type	1
+12	data-test	1
+13	data-test-get-code	1
+14	data-test-system-instructions-card	1
+15	data-scope-id	1
+22:00:00.833 Framework: content.js:448:17
+22:00:00.833 React: false | Angular: true | Vue: false content.js:452:17
+22:00:02.800 [CT] Action: run-dom content.js:492:17
+22:00:02.801 === DOM ANALYZER === content.js:386:17
+22:00:02.801 Selector Results: content.js:407:17
+22:00:02.802 console.table() content.js:421:17
+(index)	selector	count	sample
+0	ms-chat-turn	10	MS-CHAT-TURN.ng-star-inserted
+1	ms-text-chunk	6	MS-TEXT-CHUNK.ng-star-inserted
+2	mat-expansion-panel	10	MAT-EXPANSION-PANEL.mat-expansion-panel
+3	[class*="prompt"]	28	LI.mat-mdc-tooltip-trigger
+4	[class*="response"]	2	BUTTON.mat-mdc-tooltip-trigger
+22:00:02.802 AI Studio Turn Analysis: content.js:425:21
+22:00:02.802 Data Attributes: content.js:437:17
+22:00:02.806 console.table() content.js:445:17
+(index)	attr	count
+0	data-test-id	15
+1	data-turn-role	10
+2	data-a	6
+3	data-disabled	3
+4	data-id	1
+5	data-font-stylesheet	1
+6	data-glue-cookie-notification-bar-category	1
+7	data-glue-cookie-notification-bar-site-id	1
+8	data-test-view-all-history-link	1
+9	data-test-compare	1
+10	data-test-clear	1
+11	data-mat-icon-type	1
+12	data-test	1
+13	data-test-get-code	1
+14	data-test-system-instructions-card	1
+15	data-scope-id	1
+22:00:02.806 Framework: content.js:448:17
+22:00:02.807 React: false | Angular: true | Vue: false content.js:452:17
+22:00:04.844 [CT] Action: run-dom content.js:492:17
+22:00:04.844 === DOM ANALYZER === content.js:386:17
+22:00:04.844 Selector Results: content.js:407:17
+22:00:04.845 console.table() content.js:421:17
+(index)	selector	count	sample
+0	ms-chat-turn	10	MS-CHAT-TURN.ng-star-inserted
+1	ms-text-chunk	6	MS-TEXT-CHUNK.ng-star-inserted
+2	mat-expansion-panel	10	MAT-EXPANSION-PANEL.mat-expansion-panel
+3	[class*="prompt"]	28	LI.mat-mdc-tooltip-trigger
+4	[class*="response"]	2	BUTTON.mat-mdc-tooltip-trigger
+22:00:04.845 AI Studio Turn Analysis: content.js:425:21
+22:00:04.845 Data Attributes: content.js:437:17
+22:00:04.849 console.table() content.js:445:17
+(index)	attr	count
+0	data-test-id	15
+1	data-turn-role	10
+2	data-a	6
+3	data-disabled	3
+4	data-id	1
+5	data-font-stylesheet	1
+6	data-glue-cookie-notification-bar-category	1
+7	data-glue-cookie-notification-bar-site-id	1
+8	data-test-view-all-history-link	1
+9	data-test-compare	1
+10	data-test-clear	1
+11	data-mat-icon-type	1
+12	data-test	1
+13	data-test-get-code	1
+14	data-test-system-instructions-card	1
+15	data-scope-id	1
+22:00:04.849 Framework: content.js:448:17
+22:00:04.850 React: false | Angular: true | Vue: false content.js:452:17
+22:00:06.428 [CT] Action: run-dom content.js:492:17
+22:00:06.428 === DOM ANALYZER === content.js:386:17
+22:00:06.428 Selector Results: content.js:407:17
+22:00:06.429 console.table() content.js:421:17
+(index)	selector	count	sample
+0	ms-chat-turn	10	MS-CHAT-TURN.ng-star-inserted
+1	ms-text-chunk	6	MS-TEXT-CHUNK.ng-star-inserted
+2	mat-expansion-panel	10	MAT-EXPANSION-PANEL.mat-expansion-panel
+3	[class*="prompt"]	28	LI.mat-mdc-tooltip-trigger
+4	[class*="response"]	2	BUTTON.mat-mdc-tooltip-trigger
+22:00:06.429 AI Studio Turn Analysis: content.js:425:21
+22:00:06.429 Data Attributes: content.js:437:17
+22:00:06.433 console.table() content.js:445:17
+(index)	attr	count
+0	data-test-id	15
+1	data-turn-role	10
+2	data-a	6
+3	data-disabled	3
+4	data-id	1
+5	data-font-stylesheet	1
+6	data-glue-cookie-notification-bar-category	1
+7	data-glue-cookie-notification-bar-site-id	1
+8	data-test-view-all-history-link	1
+9	data-test-compare	1
+10	data-test-clear	1
+11	data-mat-icon-type	1
+12	data-test	1
+13	data-test-get-code	1
+14	data-test-system-instructions-card	1
+15	data-scope-id	1
+22:00:06.433 Framework: content.js:448:17
+22:00:06.433 React: false | Angular: true | Vue: false content.js:452:17
+22:00:08.028 [CT] Action: run-dom content.js:492:17
+22:00:08.028 === DOM ANALYZER === content.js:386:17
+22:00:08.028 Selector Results: content.js:407:17
+22:00:08.029 console.table() content.js:421:17
+(index)	selector	count	sample
+0	ms-chat-turn	10	MS-CHAT-TURN.ng-star-inserted
+1	ms-text-chunk	6	MS-TEXT-CHUNK.ng-star-inserted
+2	mat-expansion-panel	10	MAT-EXPANSION-PANEL.mat-expansion-panel
+3	[class*="prompt"]	28	LI.mat-mdc-tooltip-trigger
+4	[class*="response"]	2	BUTTON.mat-mdc-tooltip-trigger
+22:00:08.029 AI Studio Turn Analysis: content.js:425:21
+22:00:08.029 Data Attributes: content.js:437:17
+22:00:08.033 console.table() content.js:445:17
+(index)	attr	count
+0	data-test-id	15
+1	data-turn-role	10
+2	data-a	6
+3	data-disabled	3
+4	data-id	1
+5	data-font-stylesheet	1
+6	data-glue-cookie-notification-bar-category	1
+7	data-glue-cookie-notification-bar-site-id	1
+8	data-test-view-all-history-link	1
+9	data-test-compare	1
+10	data-test-clear	1
+11	data-test	1
+12	data-test-get-code	1
+13	data-test-system-instructions-card	1
+14	data-scope-id	1
+22:00:08.033 Framework: content.js:448:17
+22:00:08.033 React: false | Angular: true | Vue: false content.js:452:17
+22:00:09.339 [CT] Action: run-dom content.js:492:17
+22:00:09.339 === DOM ANALYZER === content.js:386:17
+22:00:09.339 Selector Results: content.js:407:17
+22:00:09.340 console.table() content.js:421:17
+(index)	selector	count	sample
+0	ms-chat-turn	10	MS-CHAT-TURN.ng-star-inserted
+1	ms-text-chunk	5	MS-TEXT-CHUNK.ng-star-inserted
+2	mat-expansion-panel	10	MAT-EXPANSION-PANEL.mat-expansion-panel
+3	[class*="prompt"]	28	LI.mat-mdc-tooltip-trigger
+4	[class*="response"]	2	BUTTON.mat-mdc-tooltip-trigger
+22:00:09.340 AI Studio Turn Analysis: content.js:425:21
+22:00:09.340 Data Attributes: content.js:437:17
+22:00:09.345 console.table() content.js:445:17
+(index)	attr	count
+0	data-test-id	15
+1	data-turn-role	10
+2	data-a	6
+3	data-disabled	3
+4	data-id	1
+5	data-font-stylesheet	1
+6	data-glue-cookie-notification-bar-category	1
+7	data-glue-cookie-notification-bar-site-id	1
+8	data-test-view-all-history-link	1
+9	data-test-compare	1
+10	data-test-clear	1
+11	data-test	1
+12	data-test-get-code	1
+13	data-test-system-instructions-card	1
+14	data-scope-id	1
+22:00:09.345 Framework: content.js:448:17
+22:00:09.346 React: false | Angular: true | Vue: false content.js:452:17
+22:00:10.550 [CT] Action: run-dom content.js:492:17
+22:00:10.550 === DOM ANALYZER === content.js:386:17
+22:00:10.550 Selector Results: content.js:407:17
+22:00:10.550 console.table() content.js:421:17
+(index)	selector	count	sample
+0	ms-chat-turn	10	MS-CHAT-TURN.ng-star-inserted
+1	ms-text-chunk	5	MS-TEXT-CHUNK.ng-star-inserted
+2	mat-expansion-panel	10	MAT-EXPANSION-PANEL.mat-expansion-panel
+3	[class*="prompt"]	28	LI.mat-mdc-tooltip-trigger
+4	[class*="response"]	2	BUTTON.mat-mdc-tooltip-trigger
+22:00:10.551 AI Studio Turn Analysis: content.js:425:21
+22:00:10.551 Data Attributes: content.js:437:17
+22:00:10.555 console.table() content.js:445:17
+(index)	attr	count
+0	data-test-id	15
+1	data-turn-role	10
+2	data-a	6
+3	data-disabled	3
+4	data-id	1
+5	data-font-stylesheet	1
+6	data-glue-cookie-notification-bar-category	1
+7	data-glue-cookie-notification-bar-site-id	1
+8	data-test-view-all-history-link	1
+9	data-test-compare	1
+10	data-test-clear	1
+11	data-test	1
+12	data-test-get-code	1
+13	data-test-system-instructions-card	1
+14	data-scope-id	1
+22:00:10.555 Framework: content.js:448:17
+22:00:10.555 React: false | Angular: true | Vue: false content.js:452:17
+22:00:11.689 [CT] Action: run-dom content.js:492:17
+22:00:11.689 === DOM ANALYZER === content.js:386:17
+22:00:11.689 Selector Results: content.js:407:17
+22:00:11.690 console.table() content.js:421:17
+(index)	selector	count	sample
+0	ms-chat-turn	10	MS-CHAT-TURN.ng-star-inserted
+1	ms-text-chunk	5	MS-TEXT-CHUNK.ng-star-inserted
+2	mat-expansion-panel	10	MAT-EXPANSION-PANEL.mat-expansion-panel
+3	[class*="prompt"]	28	LI.mat-mdc-tooltip-trigger
+4	[class*="response"]	2	BUTTON.mat-mdc-tooltip-trigger
+22:00:11.690 AI Studio Turn Analysis: content.js:425:21
+22:00:11.690 Data Attributes: content.js:437:17
+22:00:11.694 console.table() content.js:445:17
+(index)	attr	count
+0	data-test-id	15
+1	data-turn-role	10
+2	data-a	6
+3	data-disabled	3
+4	data-id	1
+5	data-font-stylesheet	1
+6	data-glue-cookie-notification-bar-category	1
+7	data-glue-cookie-notification-bar-site-id	1
+8	data-test-view-all-history-link	1
+9	data-test-compare	1
+10	data-test-clear	1
+11	data-test	1
+12	data-test-get-code	1
+13	data-test-system-instructions-card	1
+14	data-scope-id	1
+22:00:11.694 Framework: content.js:448:17
+22:00:11.694 React: false | Angular: true | Vue: false content.js:452:17

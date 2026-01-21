@@ -966,11 +966,15 @@ class SidebarUI {
     }
 
     // TACTILE MAP (BRAILLE)
-    if (this.data.brailleMap) {
+    if (this.data.brailleMap && this.data.brailleMap.grid) {
       text += '═'.repeat(80) + '\n';
       text += '                         TACTILE MAP (Braille - Ambient)\n';
       text += '═'.repeat(80) + '\n\n';
-      text += this.data.brailleMap + '\n\n';
+      if (this.data.brailleMap.legend) {
+        text += 'LEGEND:\n';
+        text += this.data.brailleMap.legend + '\n\n';
+      }
+      text += this.data.brailleMap.grid + '\n\n';
     }
 
     const blob = new Blob([text], { type: 'text/plain' });

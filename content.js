@@ -3,7 +3,7 @@
  * Extracts semantic page structure and accessibility information
  * with anti-fingerprinting protections
  *
- * PRIVACY & STEALTH FEATURES:
+* PRIVACY & STEALTH FEATURES:
  * ---------------------------
  * PageScope implements several protections against site-based detection:
  *
@@ -13,9 +13,19 @@
  * 4. Batch Processing: Throttles operations to appear more human-like
  * 5. Read-Only Operations: Never modifies DOM (except temporary highlights)
  *
+ * IMPORTANT PERFORMANCE NOTE:
+ * - Stealth features are ONLY active during extraction (user-triggered)
+ * - Extension is completely dormant until user clicks "Analyze"
+ * - No background processes, no continuous monitoring, no overhead
+ * - Query cache auto-expires after 100ms to prevent memory accumulation
+ *
  * NOTE: We do NOT access the browser's accessibility tree (AXTree) - we only
  * read standard DOM attributes and properties. Sites cannot detect us via
- * assistive technology APIs.
+ * assistive technology APIs. The "Braille map" is generated purely from:
+ * - Element bounding boxes (getBoundingClientRect)
+ * - Standard DOM queries (querySelectorAll)
+ * - Computed styles (getComputedStyle)
+ * No AXTree access = No assistive tech fingerprinting
  */
 
 class PageScope {
