@@ -44,8 +44,7 @@ class PageScope {
       randomizeTimings: true  // Add jitter to timing patterns
     };
 
-    // Cache frequently accessed elements to reduce queries
-    this.elementCache = new WeakMap();
+    // Cache query results to reduce observable DOM queries
     this.queryCache = new Map();
     this.lastQueryTime = 0;
   }
@@ -1240,7 +1239,6 @@ class PageScope {
   getPageType() {
     const url = window.location.href;
     const title = document.title.toLowerCase();
-    const body = document.body;
 
     // Check for AI Studio first (high confidence detection)
     const aiStudioTurns = document.querySelectorAll('[data-turn-role]');
@@ -1804,8 +1802,8 @@ class PageScope {
         text = clone.textContent?.trim() || '';
       }
 
-      // Clean up common UI artifacts
-      text = text.replace(/^(edit|more_vert|Model Thoughts)\s*/g, '').trim();
+      // Clean up common UI artifacts at start of text only
+      text = text.replace(/^(edit|more_vert|Model Thoughts)\s*/, '').trim();
 
       // Skip empty turns
       if (!text || text.length < 5) return;
@@ -2004,16 +2002,18 @@ pageScope.messageListener = (message, sender, sendResponse) => {
 // Register the listener
 browser.runtime.onMessage.addListener(pageScope.messageListener);
 
-// Cleanup on page navigation/unload
-window.addEventListener('pagehide', () => {
-  console.log('PageScope: page hiding, cleaning up to prevent memory leaks');
+// Ensure cleanup runs only once regardless of which event fires
+let pageScopeCleanedUp = false;
+function handlePageScopeCleanup() {
+  if (pageScopeCleanedUp) return;
+  pageScopeCleanedUp = true;
+  console.log('PageScope: cleaning up to prevent memory leaks');
   pageScope.cleanup();
-}, { once: true, capture: true });
+}
 
-// Also cleanup on beforeunload as safety net
-window.addEventListener('beforeunload', () => {
-  pageScope.cleanup();
-}, { once: true });
+// Cleanup on page navigation/unload
+window.addEventListener('pagehide', handlePageScopeCleanup, { once: true, capture: true });
+window.addEventListener('beforeunload', handlePageScopeCleanup, { once: true });
 
 function highlightElements(elementIds) {
   // Remove existing highlights

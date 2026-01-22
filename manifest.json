@@ -45,6 +45,10 @@
     "page": "options/options.html"
   },
 
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+  },
+
   "browser_specific_settings": {
     "gecko": {
       "id": "pagescope@internetuniverse.org",

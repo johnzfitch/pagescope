@@ -164,14 +164,30 @@ class SidebarUI {
       console.error('[PageScope] Error in refresh:', error);
       
       // Show helpful error message
-      let errorMsg = 'Failed to extract page data.<br><br>';
+      const errorMsg = document.createDocumentFragment();
+      const appendBreaks = (count) => {
+        for (let i = 0; i < count; i++) {
+          errorMsg.appendChild(document.createElement('br'));
+        }
+      };
 
-      if (error.message && error.message.includes('Receiving end does not exist')) {
-        errorMsg += 'The content script is not loaded in this page.<br><br>';
-        errorMsg += '<strong>Solution:</strong> Refresh this page (F5 or Ctrl+R) and try again.';
-      } else if (error.message) {
-        errorMsg += '<strong>Error:</strong> ' + this.escape(error.message) + '<br><br>';
-        errorMsg += 'Check the browser console (F12) for more details.';
+      errorMsg.appendChild(document.createTextNode('Failed to extract page data.'));
+      appendBreaks(2);
+
+      if (typeof error.message === 'string' && error.message.includes('Receiving end does not exist')) {
+        errorMsg.appendChild(document.createTextNode('The content script is not loaded in this page.'));
+        appendBreaks(2);
+        const strong = document.createElement('strong');
+        strong.textContent = 'Solution:';
+        errorMsg.appendChild(strong);
+        errorMsg.appendChild(document.createTextNode(' Refresh this page (F5 or Ctrl+R) and try again.'));
+      } else if (typeof error.message === 'string' && error.message) {
+        const strong = document.createElement('strong');
+        strong.textContent = 'Error:';
+        errorMsg.appendChild(strong);
+        errorMsg.appendChild(document.createTextNode(` ${error.message}`));
+        appendBreaks(2);
+        errorMsg.appendChild(document.createTextNode('Check the browser console (F12) for more details.'));
       }
 
       this.showError(errorMsg);
@@ -228,21 +244,60 @@ class SidebarUI {
     const messageDiv = document.createElement('div');
     messageDiv.className = 'empty-state-message';
 
-    // Handle HTML in message (only for controlled strings)
-    if (message.includes('<br>') || message.includes('<strong>')) {
-      // Parse controlled HTML safely
-      const temp = document.createElement('div');
-      temp.innerHTML = message;
-      while (temp.firstChild) {
-        messageDiv.appendChild(temp.firstChild);
-      }
-    } else {
+    if (typeof message === 'string') {
       messageDiv.textContent = message;
+    } else if (message instanceof Node) {
+      messageDiv.appendChild(message);
     }
 
     container.appendChild(icon);
     container.appendChild(messageDiv);
     return container;
+  }
+
+  createEmptyStateElement(iconText, messageText) {
+    const container = document.createElement('div');
+    container.className = 'empty-state';
+
+    const icon = document.createElement('div');
+    icon.className = 'empty-state-icon';
+    icon.textContent = iconText;
+
+    const message = document.createElement('div');
+    message.className = 'empty-state-message';
+    message.textContent = messageText;
+
+    container.appendChild(icon);
+    container.appendChild(message);
+    return container;
+  }
+
+  createSectionHeader(text) {
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.textContent = text;
+    return header;
+  }
+
+  createStatCard(value, labelText) {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+
+    const valueDiv = document.createElement('div');
+    valueDiv.className = 'stat-value';
+    valueDiv.textContent = String(value);
+
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'stat-label';
+    labelDiv.textContent = labelText;
+
+    card.appendChild(valueDiv);
+    card.appendChild(labelDiv);
+    return card;
+  }
+
+  getSeverityClass(severity) {
+    return severity === 'warning' ? 'warning' : 'error';
   }
 
   showError(message) {
@@ -289,135 +344,204 @@ class SidebarUI {
       console.error('Structure tab container not found');
       return;
     }
-    
-    let html = '';
-    
-    if (this.data.structure.landmarks.length > 0) {
-      html += '<div class="section-header">Landmarks</div>';
-      this.data.structure.landmarks.forEach(landmark => {
-        const icon = this.getLandmarkIcon(landmark.type);
-        html += `
-          <div class="item" title="${this.escape(landmark.path)}">
-            <div class="item-header">
-              <span class="item-icon">${icon}</span>
-              <span class="item-label">${this.escape(landmark.type)}</span>
-            </div>
-            ${landmark.label ? `<div class="item-detail">${this.escape(landmark.label)}</div>` : ''}
-          </div>
-        `;
-      });
-    }
-    
-    if (this.data.structure.headings.length > 0) {
-      html += '<div class="section-header">Headings</div>';
-      this.data.structure.headings.forEach(heading => {
-        html += `
-          <div class="item heading-item" style="--level: ${heading.level - 1}" title="${this.escape(heading.path)}">
-            <div class="item-header">
-              <span class="item-icon">H${heading.level}</span>
-              <span class="item-label">${this.escape(heading.text)}</span>
-            </div>
-          </div>
-        `;
-      });
-    }
-    
-    if (this.data.structure.sections.length > 0) {
-      html += '<div class="section-header">Sections & Articles</div>';
-      this.data.structure.sections.forEach(section => {
-        if (section.type === 'section') {
-          // Section with potential nested articles
-          html += `
-            <div class="item" title="${this.escape(section.path || section.id)}">
-              <div class="item-header">
-                <span class="item-icon">📑</span>
-                <span class="item-label">Section${section.heading ? ': ' + this.escape(section.heading) : ''}</span>
-                <span class="item-badge">${section.wordCount} words</span>
-              </div>
-          `;
 
-          // Show nested articles
-          if (section.articles && section.articles.length > 0) {
-            html += '<div class="item-detail">Articles: ';
-            section.articles.forEach((article, idx) => {
-              if (idx > 0) html += ', ';
-              html += `${this.escape(article.heading || 'Untitled')} (${article.wordCount}w)`;
-            });
-            html += '</div>';
-          }
+    container.textContent = '';
+    const fragment = document.createDocumentFragment();
+    const { landmarks, headings, sections } = this.data.structure;
 
-          html += '</div>';
-        } else {
-          // Standalone article
-          html += `
-            <div class="item" title="${this.escape(section.path || section.id)}">
-              <div class="item-header">
-                <span class="item-icon">📄</span>
-                <span class="item-label">Article${section.heading ? ': ' + this.escape(section.heading) : ''}</span>
-                <span class="item-badge">${section.wordCount} words</span>
-              </div>
-            </div>
-          `;
+    if (landmarks.length > 0) {
+      fragment.appendChild(this.createSectionHeader('Landmarks'));
+      landmarks.forEach(landmark => {
+        const item = document.createElement('div');
+        item.className = 'item';
+        if (landmark.path) item.title = landmark.path;
+
+        const header = document.createElement('div');
+        header.className = 'item-header';
+
+        const icon = document.createElement('span');
+        icon.className = 'item-icon';
+        icon.textContent = this.getLandmarkIcon(landmark.type);
+
+        const label = document.createElement('span');
+        label.className = 'item-label';
+        label.textContent = landmark.type || '';
+
+        header.appendChild(icon);
+        header.appendChild(label);
+        item.appendChild(header);
+
+        if (landmark.label) {
+          const detail = document.createElement('div');
+          detail.className = 'item-detail';
+          detail.textContent = landmark.label;
+          item.appendChild(detail);
         }
+
+        fragment.appendChild(item);
       });
     }
-    
-    if (html === '') {
-      html = `
-        <div class="empty-state">
-          <div class="empty-state-icon">📭</div>
-          <div class="empty-state-message">No structure elements found</div>
-        </div>
-      `;
+
+    if (headings.length > 0) {
+      fragment.appendChild(this.createSectionHeader('Headings'));
+      headings.forEach(heading => {
+        const item = document.createElement('div');
+        item.className = 'item heading-item';
+        const level = Number(heading.level) || 1;
+        item.style.setProperty('--level', String(level - 1));
+        if (heading.path) item.title = heading.path;
+
+        const header = document.createElement('div');
+        header.className = 'item-header';
+
+        const icon = document.createElement('span');
+        icon.className = 'item-icon';
+        icon.textContent = `H${level}`;
+
+        const label = document.createElement('span');
+        label.className = 'item-label';
+        label.textContent = heading.text || '';
+
+        header.appendChild(icon);
+        header.appendChild(label);
+        item.appendChild(header);
+
+        fragment.appendChild(item);
+      });
     }
-    
-    container.innerHTML = html;
+
+    if (sections.length > 0) {
+      fragment.appendChild(this.createSectionHeader('Sections & Articles'));
+      sections.forEach(section => {
+        const item = document.createElement('div');
+        item.className = 'item';
+        const path = section.path || section.id;
+        if (path) item.title = path;
+
+        const header = document.createElement('div');
+        header.className = 'item-header';
+
+        const icon = document.createElement('span');
+        icon.className = 'item-icon';
+
+        const label = document.createElement('span');
+        label.className = 'item-label';
+
+        const badge = document.createElement('span');
+        badge.className = 'item-badge';
+        const wordCount = Number(section.wordCount) || 0;
+        badge.textContent = `${wordCount} words`;
+
+        if (section.type === 'section') {
+          icon.textContent = '📑';
+          label.textContent = section.heading ? `Section: ${section.heading}` : 'Section';
+        } else {
+          icon.textContent = '📄';
+          label.textContent = section.heading ? `Article: ${section.heading}` : 'Article';
+        }
+
+        header.appendChild(icon);
+        header.appendChild(label);
+        header.appendChild(badge);
+        item.appendChild(header);
+
+        if (section.type === 'section' && section.articles && section.articles.length > 0) {
+          const detail = document.createElement('div');
+          detail.className = 'item-detail';
+          const articlesText = section.articles.map(article => {
+            const articleHeading = article.heading || 'Untitled';
+            const articleWords = Number(article.wordCount) || 0;
+            return `${articleHeading} (${articleWords}w)`;
+          }).join(', ');
+          detail.textContent = `Articles: ${articlesText}`;
+          item.appendChild(detail);
+        }
+
+        fragment.appendChild(item);
+      });
+    }
+
+    if (!fragment.childNodes.length) {
+      fragment.appendChild(this.createEmptyStateElement('📭', 'No structure elements found'));
+    }
+
+    container.appendChild(fragment);
   }
   
   renderInteractive() {
     const container = document.getElementById('interactive-tab');
-    
+    if (!container) return;
+
     let elements = this.data.interactive;
-    
+
     if (this.viewportOnly) {
       elements = elements.filter(el => el.bounds.inViewport);
     }
-    
-    let html = '';
-    
-    if (elements.length === 0) {
-      html = `
-        <div class="empty-state">
-          <div class="empty-state-icon">🔍</div>
-          <div class="empty-state-message">
-            ${this.viewportOnly ? 'No interactive elements in viewport' : 'No interactive elements found'}
-          </div>
-        </div>
-      `;
-    } else {
-      elements.forEach(el => {
-        const icon = this.getInteractiveIcon(el.role);
-        const states = this.getStateHTML(el.state, el.bounds.inViewport);
-        
-        html += `
-          <div class="item interactive-item" data-id="${el.id}" title="${this.escape(el.path)}">
-            <div class="item-id">${el.id}</div>
-            <div class="item-header">
-              <span class="item-icon">${icon}</span>
-              <span class="item-label">${this.escape(el.label || el.role)}</span>
-            </div>
-            ${el.type !== el.role ? `<div class="item-detail">${this.escape(el.type)}</div>` : ''}
-            ${states ? `<div class="state-badges">${states}</div>` : ''}
-          </div>
-        `;
-      });
+
+    const list = container.querySelector('#interactive-list');
+    if (!list) {
+      console.error('Interactive list container not found');
+      return;
     }
-    
-    container.querySelector('#interactive-list').innerHTML = html;
-    
-    container.querySelectorAll('.interactive-item').forEach(item => {
+
+    list.textContent = '';
+
+    if (elements.length === 0) {
+      const message = this.viewportOnly ? 'No interactive elements in viewport' : 'No interactive elements found';
+      list.appendChild(this.createEmptyStateElement('🔍', message));
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    elements.forEach(el => {
+      const item = document.createElement('div');
+      item.className = 'item interactive-item';
+      item.dataset.id = String(el.id);
+      if (el.path) item.title = el.path;
+
+      const id = document.createElement('div');
+      id.className = 'item-id';
+      id.textContent = String(el.id);
+      item.appendChild(id);
+
+      const header = document.createElement('div');
+      header.className = 'item-header';
+
+      const icon = document.createElement('span');
+      icon.className = 'item-icon';
+      icon.textContent = this.getInteractiveIcon(el.role);
+
+      const label = document.createElement('span');
+      label.className = 'item-label';
+      label.textContent = el.label || el.role || '';
+
+      header.appendChild(icon);
+      header.appendChild(label);
+      item.appendChild(header);
+
+      if (el.type !== el.role) {
+        const detail = document.createElement('div');
+        detail.className = 'item-detail';
+        detail.textContent = el.type || '';
+        item.appendChild(detail);
+      }
+
+      const badges = this.getStateBadges(el.state, el.bounds.inViewport);
+      if (badges.childNodes.length > 0) {
+        const stateContainer = document.createElement('div');
+        stateContainer.className = 'state-badges';
+        stateContainer.appendChild(badges);
+        item.appendChild(stateContainer);
+      }
+
+      fragment.appendChild(item);
+    });
+
+    list.appendChild(fragment);
+
+    list.querySelectorAll('.interactive-item').forEach(item => {
       item.addEventListener('click', async () => {
-        const id = parseInt(item.dataset.id);
+        const id = parseInt(item.dataset.id, 10);
         await this.highlightElement(id);
       });
     });
@@ -425,95 +549,121 @@ class SidebarUI {
   
   renderAccessibility() {
     const container = document.getElementById('accessibility-tab');
-    
+    if (!container) return;
+
     const { stats, issues } = this.data.accessibility;
-    
-    let statsHTML = `
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-value">${stats.landmarks}</div>
-          <div class="stat-label">Landmarks</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${stats.headings}</div>
-          <div class="stat-label">Headings</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${stats.altText}/${stats.totalImages}</div>
-          <div class="stat-label">Alt Text</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${issues.length}</div>
-          <div class="stat-label">Issues</div>
-        </div>
-      </div>
-    `;
-    
-    document.getElementById('a11y-stats').innerHTML = statsHTML;
-    
-    let issuesHTML = '';
-    
-    if (issues.length === 0) {
-      issuesHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">✅</div>
-          <div class="empty-state-message">No accessibility issues found</div>
-        </div>
-      `;
-    } else {
-      issuesHTML = '<div class="section-header">Issues Summary</div>';
-      
-      // Group by type and severity
-      const grouped = {};
-      issues.forEach(issue => {
-        const key = `${issue.severity}-${issue.type}-${issue.message}`;
-        if (!grouped[key]) {
-          grouped[key] = {
-            severity: issue.severity,
-            type: issue.type,
-            message: issue.message,
-            element: issue.element,
-            count: 0,
-            examples: []
-          };
-        }
-        grouped[key].count++;
-        if (grouped[key].examples.length < 3) {
-          grouped[key].examples.push(issue.path);
-        }
-      });
-      
-      // Sort by severity (errors first)
-      const sortedGroups = Object.values(grouped).sort((a, b) => {
-        if (a.severity === 'error' && b.severity !== 'error') return -1;
-        if (a.severity !== 'error' && b.severity === 'error') return 1;
-        return b.count - a.count;
-      });
-      
-      sortedGroups.forEach(group => {
-        issuesHTML += `
-          <div class="issue-item ${group.severity}">
-            <div class="issue-header">
-              <span class="issue-severity ${group.severity}">${group.severity}</span>
-              <span>${group.element}</span>
-              <span class="issue-count">×${group.count}</span>
-            </div>
-            <div class="issue-message">${group.message}</div>
-            ${group.examples.length > 0 ? `
-              <details class="issue-details">
-                <summary>Show examples (${Math.min(3, group.count)})</summary>
-                <div class="issue-examples">
-                  ${group.examples.map(path => `<div class="issue-path">${this.escape(path)}</div>`).join('')}
-                  ${group.count > 3 ? `<div class="issue-more">...and ${group.count - 3} more</div>` : ''}
-                </div>
-              </details>
-            ` : ''}
-          </div>
-        `;
-      });
+
+    const statsContainer = document.getElementById('a11y-stats');
+    if (statsContainer) {
+      statsContainer.textContent = '';
+      const grid = document.createElement('div');
+      grid.className = 'stats-grid';
+      grid.appendChild(this.createStatCard(stats.landmarks, 'Landmarks'));
+      grid.appendChild(this.createStatCard(stats.headings, 'Headings'));
+      grid.appendChild(this.createStatCard(`${stats.altText}/${stats.totalImages}`, 'Alt Text'));
+      grid.appendChild(this.createStatCard(issues.length, 'Issues'));
+      statsContainer.appendChild(grid);
     }
-    
-    document.getElementById('a11y-issues').innerHTML = issuesHTML;
+
+    const issuesContainer = document.getElementById('a11y-issues');
+    if (!issuesContainer) return;
+
+    issuesContainer.textContent = '';
+
+    if (issues.length === 0) {
+      issuesContainer.appendChild(this.createEmptyStateElement('✅', 'No accessibility issues found'));
+      return;
+    }
+
+    issuesContainer.appendChild(this.createSectionHeader('Issues Summary'));
+
+    // Group by type and severity
+    const grouped = {};
+    issues.forEach(issue => {
+      const key = `${issue.severity}-${issue.type}-${issue.message}`;
+      if (!grouped[key]) {
+        grouped[key] = {
+          severity: issue.severity,
+          type: issue.type,
+          message: issue.message,
+          element: issue.element,
+          count: 0,
+          examples: []
+        };
+      }
+      grouped[key].count++;
+      if (grouped[key].examples.length < 3) {
+        grouped[key].examples.push(issue.path);
+      }
+    });
+
+    // Sort by severity (errors first)
+    const sortedGroups = Object.values(grouped).sort((a, b) => {
+      if (a.severity === 'error' && b.severity !== 'error') return -1;
+      if (a.severity !== 'error' && b.severity === 'error') return 1;
+      return b.count - a.count;
+    });
+
+    sortedGroups.forEach(group => {
+      const issueItem = document.createElement('div');
+      const severityClass = this.getSeverityClass(group.severity);
+      issueItem.className = `issue-item ${severityClass}`;
+
+      const issueHeader = document.createElement('div');
+      issueHeader.className = 'issue-header';
+
+      const severity = document.createElement('span');
+      severity.className = `issue-severity ${severityClass}`;
+      severity.textContent = group.severity || '';
+
+      const element = document.createElement('span');
+      element.textContent = group.element || '';
+
+      const count = document.createElement('span');
+      count.className = 'issue-count';
+      count.textContent = `×${group.count}`;
+
+      issueHeader.appendChild(severity);
+      issueHeader.appendChild(element);
+      issueHeader.appendChild(count);
+
+      const issueMessage = document.createElement('div');
+      issueMessage.className = 'issue-message';
+      issueMessage.textContent = group.message || '';
+
+      issueItem.appendChild(issueHeader);
+      issueItem.appendChild(issueMessage);
+
+      if (group.examples.length > 0) {
+        const details = document.createElement('details');
+        details.className = 'issue-details';
+
+        const summary = document.createElement('summary');
+        summary.textContent = `Show examples (${Math.min(3, group.count)})`;
+        details.appendChild(summary);
+
+        const examples = document.createElement('div');
+        examples.className = 'issue-examples';
+        group.examples.forEach(path => {
+          const example = document.createElement('div');
+          example.className = 'issue-path';
+          example.textContent = path;
+          examples.appendChild(example);
+        });
+
+        if (group.count > 3) {
+          const more = document.createElement('div');
+          more.className = 'issue-more';
+          more.textContent = `...and ${group.count - 3} more`;
+          examples.appendChild(more);
+        }
+
+        details.appendChild(examples);
+        issueItem.appendChild(details);
+      }
+
+      issuesContainer.appendChild(issueItem);
+    });
   }
   
   async highlightAll() {
@@ -947,15 +1097,19 @@ class SidebarUI {
       const formatTree = (nodes, indent = '') => {
         let output = '';
         nodes.forEach(node => {
-          const desc = node.description ? ` "${this.cleanText(node.description).slice(0, 40)}"` : '';
-          output += `${indent}├─ [${node.role.toUpperCase()}]${desc} (${node.position}, ${node.size})\n`;
+          const label = node.label ? ` "${this.cleanText(node.label).slice(0, 40)}"` : '';
+          const spatial = node.spatial || '';
+          const size = node.bounds ? `${node.bounds.w}x${node.bounds.h}` : '';
+          output += `${indent}|- [${(node.type || node.tag || 'unknown').toUpperCase()}]${label} (${spatial}, ${size})\n`;
           if (node.children && node.children.length > 0) {
-            output += formatTree(node.children, indent + '│  ');
+            output += formatTree(node.children, indent + '|  ');
           }
         });
         return output;
       };
-      text += formatTree(this.data.pageAnatomy.layout);
+      // pageAnatomy is the root node with children, not an object with layout property
+      const rootNodes = this.data.pageAnatomy.children || [this.data.pageAnatomy];
+      text += formatTree(rootNodes);
       text += '\n';
     }
 
@@ -1404,16 +1558,24 @@ class SidebarUI {
     return icons[role] || '▪️';
   }
   
-  getStateHTML(state, inViewport) {
-    const badges = [];
-    
-    if (state.disabled) badges.push('<span class="state-badge disabled">disabled</span>');
-    if (state.checked) badges.push('<span class="state-badge checked">checked</span>');
-    if (state.required) badges.push('<span class="state-badge required">required</span>');
-    if (state.expanded) badges.push('<span class="state-badge expanded">expanded</span>');
-    if (inViewport) badges.push('<span class="state-badge viewport">in view</span>');
-    
-    return badges.join('');
+  createStateBadge(text, className) {
+    const badge = document.createElement('span');
+    badge.className = `state-badge ${className}`;
+    badge.textContent = text;
+    return badge;
+  }
+
+  getStateBadges(state, inViewport) {
+    const fragment = document.createDocumentFragment();
+    if (!state) return fragment;
+
+    if (state.disabled) fragment.appendChild(this.createStateBadge('disabled', 'disabled'));
+    if (state.checked) fragment.appendChild(this.createStateBadge('checked', 'checked'));
+    if (state.required) fragment.appendChild(this.createStateBadge('required', 'required'));
+    if (state.expanded) fragment.appendChild(this.createStateBadge('expanded', 'expanded'));
+    if (inViewport) fragment.appendChild(this.createStateBadge('in view', 'viewport'));
+
+    return fragment;
   }
   
   escape(text) {
