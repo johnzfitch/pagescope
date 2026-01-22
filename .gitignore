@@ -6,14 +6,29 @@ screenshot*.png
 diagram-sample.txt
 console-export.log
 
+# Test files
+*-test.js
+*-test.html
+*-test.txt
+test.html
+test.js
+
+# Development artifacts
+pyghidra_mcp_projects/
+
 # MCP server (separate distribution)
 mcp/
 mcp-server/
 
-# Build artifacts
+# Build artifacts (except release xpi)
 web-ext-artifacts/
 *.zip
-*.xpi
+
+# Model/AI documentation
+*-model.md
+*-training.md
+*.prompt
+prompts/
 
 # OS files
 .DS_Store

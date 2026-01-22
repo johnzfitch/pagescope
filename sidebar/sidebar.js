@@ -79,8 +79,8 @@ class SidebarUI {
       this.exportMarkdown();
     });
 
-    document.getElementById('export-text').addEventListener('click', () => {
-      this.exportText();
+    document.getElementById('export-braille').addEventListener('click', () => {
+      this.exportBraille();
     });
   }
   
@@ -99,55 +99,45 @@ class SidebarUI {
   async refresh() {
     console.log('[PageScope] Refresh called');
     this.showLoading();
-    
+
     try {
       const tabs = await browser.tabs.query({ active: true, currentWindow: true });
       console.log('[PageScope] Active tabs:', tabs);
-      
+
       if (!tabs[0]) {
         this.showError('No active tab found');
         return;
       }
-      
+
       const tab = tabs[0];
       console.log('[PageScope] Current tab:', tab.id, tab.url);
 
-      // Check if URL is undefined or restricted
-      if (!tab.url) {
-        console.log('[PageScope] Tab URL is undefined');
-        this.showError('Cannot access this page.<br><br>This might be a browser internal page or a restricted tab.<br><br>Please navigate to a regular website like:<br>• https://example.com<br>• Your test-page.html file<br>• Any HTTPS website');
-        return;
-      }
-
-      // Check if it's a restricted page
-      if (tab.url.startsWith('about:') ||
-          tab.url.startsWith('chrome:') ||
-          tab.url.startsWith('moz-extension:')) {
-        console.log('[PageScope] Restricted page detected:', tab.url);
-        this.showError('Cannot inspect browser internal pages.<br><br>Please navigate to a regular website like:<br>• https://example.com<br>• Your test-page.html file<br>• Any HTTPS website');
-        return;
-      }
-      
-      console.log('[PageScope] Injecting content script...');
-
-      // Inject content script dynamically (MV3 with activeTab only)
+      // Inject content script directly from sidebar (Firefox 131+ sidebar doesn't trigger action.onClicked)
       try {
         await browser.scripting.executeScript({
           target: { tabId: tab.id },
-          files: ['content.js']
+          files: ['/content.js']
         });
-        console.log('[PageScope] Content script injected successfully');
+        console.log('[PageScope] Content script injected');
       } catch (e) {
-        // Script might already be injected, that's okay
         console.log('[PageScope] Content script injection note:', e.message);
+        // Script might already be injected or page is restricted
       }
 
       // Small delay to ensure content script is ready
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      console.log('[PageScope] Sending extract message...');
+      // Load user settings for extraction options
+      const settings = await browser.storage.local.get({
+        brailleResolution: 'standard'
+      });
+
+      console.log('[PageScope] Sending extract message with options:', settings);
       this.data = await browser.tabs.sendMessage(tab.id, {
-        action: 'extract'
+        action: 'extract',
+        options: {
+          brailleResolution: settings.brailleResolution
+        }
       });
       
       if (!this.data) {
@@ -170,14 +160,30 @@ class SidebarUI {
       console.error('[PageScope] Error in refresh:', error);
       
       // Show helpful error message
-      let errorMsg = 'Failed to extract page data.<br><br>';
+      const errorMsg = document.createDocumentFragment();
+      const appendBreaks = (count) => {
+        for (let i = 0; i < count; i++) {
+          errorMsg.appendChild(document.createElement('br'));
+        }
+      };
 
-      if (error.message && error.message.includes('Receiving end does not exist')) {
-        errorMsg += 'The content script is not loaded in this page.<br><br>';
-        errorMsg += '<strong>Solution:</strong> Refresh this page (F5 or Ctrl+R) and try again.';
-      } else if (error.message) {
-        errorMsg += '<strong>Error:</strong> ' + this.escape(error.message) + '<br><br>';
-        errorMsg += 'Check the browser console (F12) for more details.';
+      errorMsg.appendChild(document.createTextNode('Failed to extract page data.'));
+      appendBreaks(2);
+
+      if (typeof error.message === 'string' && error.message.includes('Receiving end does not exist')) {
+        errorMsg.appendChild(document.createTextNode('The content script is not loaded in this page.'));
+        appendBreaks(2);
+        const strong = document.createElement('strong');
+        strong.textContent = 'Solution:';
+        errorMsg.appendChild(strong);
+        errorMsg.appendChild(document.createTextNode(' Refresh this page (F5 or Ctrl+R) and try again.'));
+      } else if (typeof error.message === 'string' && error.message) {
+        const strong = document.createElement('strong');
+        strong.textContent = 'Error:';
+        errorMsg.appendChild(strong);
+        errorMsg.appendChild(document.createTextNode(` ${error.message}`));
+        appendBreaks(2);
+        errorMsg.appendChild(document.createTextNode('Check the browser console (F12) for more details.'));
       }
 
       this.showError(errorMsg);
@@ -234,21 +240,60 @@ class SidebarUI {
     const messageDiv = document.createElement('div');
     messageDiv.className = 'empty-state-message';
 
-    // Handle HTML in message (only for controlled strings)
-    if (message.includes('<br>') || message.includes('<strong>')) {
-      // Parse controlled HTML safely
-      const temp = document.createElement('div');
-      temp.innerHTML = message;
-      while (temp.firstChild) {
-        messageDiv.appendChild(temp.firstChild);
-      }
-    } else {
+    if (typeof message === 'string') {
       messageDiv.textContent = message;
+    } else if (message instanceof Node) {
+      messageDiv.appendChild(message);
     }
 
     container.appendChild(icon);
     container.appendChild(messageDiv);
     return container;
+  }
+
+  createEmptyStateElement(iconText, messageText) {
+    const container = document.createElement('div');
+    container.className = 'empty-state';
+
+    const icon = document.createElement('div');
+    icon.className = 'empty-state-icon';
+    icon.textContent = iconText;
+
+    const message = document.createElement('div');
+    message.className = 'empty-state-message';
+    message.textContent = messageText;
+
+    container.appendChild(icon);
+    container.appendChild(message);
+    return container;
+  }
+
+  createSectionHeader(text) {
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.textContent = text;
+    return header;
+  }
+
+  createStatCard(value, labelText) {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+
+    const valueDiv = document.createElement('div');
+    valueDiv.className = 'stat-value';
+    valueDiv.textContent = String(value);
+
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'stat-label';
+    labelDiv.textContent = labelText;
+
+    card.appendChild(valueDiv);
+    card.appendChild(labelDiv);
+    return card;
+  }
+
+  getSeverityClass(severity) {
+    return severity === 'warning' ? 'warning' : 'error';
   }
 
   showError(message) {
@@ -295,135 +340,204 @@ class SidebarUI {
       console.error('Structure tab container not found');
       return;
     }
-    
-    let html = '';
-    
-    if (this.data.structure.landmarks.length > 0) {
-      html += '<div class="section-header">Landmarks</div>';
-      this.data.structure.landmarks.forEach(landmark => {
-        const icon = this.getLandmarkIcon(landmark.type);
-        html += `
-          <div class="item" title="${this.escape(landmark.path)}">
-            <div class="item-header">
-              <span class="item-icon">${icon}</span>
-              <span class="item-label">${this.escape(landmark.type)}</span>
-            </div>
-            ${landmark.label ? `<div class="item-detail">${this.escape(landmark.label)}</div>` : ''}
-          </div>
-        `;
-      });
-    }
-    
-    if (this.data.structure.headings.length > 0) {
-      html += '<div class="section-header">Headings</div>';
-      this.data.structure.headings.forEach(heading => {
-        html += `
-          <div class="item heading-item" style="--level: ${heading.level - 1}" title="${this.escape(heading.path)}">
-            <div class="item-header">
-              <span class="item-icon">H${heading.level}</span>
-              <span class="item-label">${this.escape(heading.text)}</span>
-            </div>
-          </div>
-        `;
-      });
-    }
-    
-    if (this.data.structure.sections.length > 0) {
-      html += '<div class="section-header">Sections & Articles</div>';
-      this.data.structure.sections.forEach(section => {
-        if (section.type === 'section') {
-          // Section with potential nested articles
-          html += `
-            <div class="item" title="${this.escape(section.path || section.id)}">
-              <div class="item-header">
-                <span class="item-icon">📑</span>
-                <span class="item-label">Section${section.heading ? ': ' + this.escape(section.heading) : ''}</span>
-                <span class="item-badge">${section.wordCount} words</span>
-              </div>
-          `;
 
-          // Show nested articles
-          if (section.articles && section.articles.length > 0) {
-            html += '<div class="item-detail">Articles: ';
-            section.articles.forEach((article, idx) => {
-              if (idx > 0) html += ', ';
-              html += `${this.escape(article.heading || 'Untitled')} (${article.wordCount}w)`;
-            });
-            html += '</div>';
-          }
+    container.textContent = '';
+    const fragment = document.createDocumentFragment();
+    const { landmarks, headings, sections } = this.data.structure;
 
-          html += '</div>';
-        } else {
-          // Standalone article
-          html += `
-            <div class="item" title="${this.escape(section.path || section.id)}">
-              <div class="item-header">
-                <span class="item-icon">📄</span>
-                <span class="item-label">Article${section.heading ? ': ' + this.escape(section.heading) : ''}</span>
-                <span class="item-badge">${section.wordCount} words</span>
-              </div>
-            </div>
-          `;
+    if (landmarks.length > 0) {
+      fragment.appendChild(this.createSectionHeader('Landmarks'));
+      landmarks.forEach(landmark => {
+        const item = document.createElement('div');
+        item.className = 'item';
+        if (landmark.path) item.title = landmark.path;
+
+        const header = document.createElement('div');
+        header.className = 'item-header';
+
+        const icon = document.createElement('span');
+        icon.className = 'item-icon';
+        icon.textContent = this.getLandmarkIcon(landmark.type);
+
+        const label = document.createElement('span');
+        label.className = 'item-label';
+        label.textContent = landmark.type || '';
+
+        header.appendChild(icon);
+        header.appendChild(label);
+        item.appendChild(header);
+
+        if (landmark.label) {
+          const detail = document.createElement('div');
+          detail.className = 'item-detail';
+          detail.textContent = landmark.label;
+          item.appendChild(detail);
         }
+
+        fragment.appendChild(item);
       });
     }
-    
-    if (html === '') {
-      html = `
-        <div class="empty-state">
-          <div class="empty-state-icon">📭</div>
-          <div class="empty-state-message">No structure elements found</div>
-        </div>
-      `;
+
+    if (headings.length > 0) {
+      fragment.appendChild(this.createSectionHeader('Headings'));
+      headings.forEach(heading => {
+        const item = document.createElement('div');
+        item.className = 'item heading-item';
+        const level = Number(heading.level) || 1;
+        item.style.setProperty('--level', String(level - 1));
+        if (heading.path) item.title = heading.path;
+
+        const header = document.createElement('div');
+        header.className = 'item-header';
+
+        const icon = document.createElement('span');
+        icon.className = 'item-icon';
+        icon.textContent = `H${level}`;
+
+        const label = document.createElement('span');
+        label.className = 'item-label';
+        label.textContent = heading.text || '';
+
+        header.appendChild(icon);
+        header.appendChild(label);
+        item.appendChild(header);
+
+        fragment.appendChild(item);
+      });
     }
-    
-    container.innerHTML = html;
+
+    if (sections.length > 0) {
+      fragment.appendChild(this.createSectionHeader('Sections & Articles'));
+      sections.forEach(section => {
+        const item = document.createElement('div');
+        item.className = 'item';
+        const path = section.path || section.id;
+        if (path) item.title = path;
+
+        const header = document.createElement('div');
+        header.className = 'item-header';
+
+        const icon = document.createElement('span');
+        icon.className = 'item-icon';
+
+        const label = document.createElement('span');
+        label.className = 'item-label';
+
+        const badge = document.createElement('span');
+        badge.className = 'item-badge';
+        const wordCount = Number(section.wordCount) || 0;
+        badge.textContent = `${wordCount} words`;
+
+        if (section.type === 'section') {
+          icon.textContent = '📑';
+          label.textContent = section.heading ? `Section: ${section.heading}` : 'Section';
+        } else {
+          icon.textContent = '📄';
+          label.textContent = section.heading ? `Article: ${section.heading}` : 'Article';
+        }
+
+        header.appendChild(icon);
+        header.appendChild(label);
+        header.appendChild(badge);
+        item.appendChild(header);
+
+        if (section.type === 'section' && section.articles && section.articles.length > 0) {
+          const detail = document.createElement('div');
+          detail.className = 'item-detail';
+          const articlesText = section.articles.map(article => {
+            const articleHeading = article.heading || 'Untitled';
+            const articleWords = Number(article.wordCount) || 0;
+            return `${articleHeading} (${articleWords}w)`;
+          }).join(', ');
+          detail.textContent = `Articles: ${articlesText}`;
+          item.appendChild(detail);
+        }
+
+        fragment.appendChild(item);
+      });
+    }
+
+    if (!fragment.childNodes.length) {
+      fragment.appendChild(this.createEmptyStateElement('📭', 'No structure elements found'));
+    }
+
+    container.appendChild(fragment);
   }
   
   renderInteractive() {
     const container = document.getElementById('interactive-tab');
-    
+    if (!container) return;
+
     let elements = this.data.interactive;
-    
+
     if (this.viewportOnly) {
       elements = elements.filter(el => el.bounds.inViewport);
     }
-    
-    let html = '';
-    
-    if (elements.length === 0) {
-      html = `
-        <div class="empty-state">
-          <div class="empty-state-icon">🔍</div>
-          <div class="empty-state-message">
-            ${this.viewportOnly ? 'No interactive elements in viewport' : 'No interactive elements found'}
-          </div>
-        </div>
-      `;
-    } else {
-      elements.forEach(el => {
-        const icon = this.getInteractiveIcon(el.role);
-        const states = this.getStateHTML(el.state, el.bounds.inViewport);
-        
-        html += `
-          <div class="item interactive-item" data-id="${el.id}" title="${this.escape(el.path)}">
-            <div class="item-id">${el.id}</div>
-            <div class="item-header">
-              <span class="item-icon">${icon}</span>
-              <span class="item-label">${this.escape(el.label || el.role)}</span>
-            </div>
-            ${el.type !== el.role ? `<div class="item-detail">${this.escape(el.type)}</div>` : ''}
-            ${states ? `<div class="state-badges">${states}</div>` : ''}
-          </div>
-        `;
-      });
+
+    const list = container.querySelector('#interactive-list');
+    if (!list) {
+      console.error('Interactive list container not found');
+      return;
     }
-    
-    container.querySelector('#interactive-list').innerHTML = html;
-    
-    container.querySelectorAll('.interactive-item').forEach(item => {
+
+    list.textContent = '';
+
+    if (elements.length === 0) {
+      const message = this.viewportOnly ? 'No interactive elements in viewport' : 'No interactive elements found';
+      list.appendChild(this.createEmptyStateElement('🔍', message));
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    elements.forEach(el => {
+      const item = document.createElement('div');
+      item.className = 'item interactive-item';
+      item.dataset.id = String(el.id);
+      if (el.path) item.title = el.path;
+
+      const id = document.createElement('div');
+      id.className = 'item-id';
+      id.textContent = String(el.id);
+      item.appendChild(id);
+
+      const header = document.createElement('div');
+      header.className = 'item-header';
+
+      const icon = document.createElement('span');
+      icon.className = 'item-icon';
+      icon.textContent = this.getInteractiveIcon(el.role);
+
+      const label = document.createElement('span');
+      label.className = 'item-label';
+      label.textContent = el.label || el.role || '';
+
+      header.appendChild(icon);
+      header.appendChild(label);
+      item.appendChild(header);
+
+      if (el.type !== el.role) {
+        const detail = document.createElement('div');
+        detail.className = 'item-detail';
+        detail.textContent = el.type || '';
+        item.appendChild(detail);
+      }
+
+      const badges = this.getStateBadges(el.state, el.bounds.inViewport);
+      if (badges.childNodes.length > 0) {
+        const stateContainer = document.createElement('div');
+        stateContainer.className = 'state-badges';
+        stateContainer.appendChild(badges);
+        item.appendChild(stateContainer);
+      }
+
+      fragment.appendChild(item);
+    });
+
+    list.appendChild(fragment);
+
+    list.querySelectorAll('.interactive-item').forEach(item => {
       item.addEventListener('click', async () => {
-        const id = parseInt(item.dataset.id);
+        const id = parseInt(item.dataset.id, 10);
         await this.highlightElement(id);
       });
     });
@@ -431,95 +545,121 @@ class SidebarUI {
   
   renderAccessibility() {
     const container = document.getElementById('accessibility-tab');
-    
+    if (!container) return;
+
     const { stats, issues } = this.data.accessibility;
-    
-    let statsHTML = `
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-value">${stats.landmarks}</div>
-          <div class="stat-label">Landmarks</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${stats.headings}</div>
-          <div class="stat-label">Headings</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${stats.altText}/${stats.totalImages}</div>
-          <div class="stat-label">Alt Text</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${issues.length}</div>
-          <div class="stat-label">Issues</div>
-        </div>
-      </div>
-    `;
-    
-    document.getElementById('a11y-stats').innerHTML = statsHTML;
-    
-    let issuesHTML = '';
-    
-    if (issues.length === 0) {
-      issuesHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">✅</div>
-          <div class="empty-state-message">No accessibility issues found</div>
-        </div>
-      `;
-    } else {
-      issuesHTML = '<div class="section-header">Issues Summary</div>';
-      
-      // Group by type and severity
-      const grouped = {};
-      issues.forEach(issue => {
-        const key = `${issue.severity}-${issue.type}-${issue.message}`;
-        if (!grouped[key]) {
-          grouped[key] = {
-            severity: issue.severity,
-            type: issue.type,
-            message: issue.message,
-            element: issue.element,
-            count: 0,
-            examples: []
-          };
-        }
-        grouped[key].count++;
-        if (grouped[key].examples.length < 3) {
-          grouped[key].examples.push(issue.path);
-        }
-      });
-      
-      // Sort by severity (errors first)
-      const sortedGroups = Object.values(grouped).sort((a, b) => {
-        if (a.severity === 'error' && b.severity !== 'error') return -1;
-        if (a.severity !== 'error' && b.severity === 'error') return 1;
-        return b.count - a.count;
-      });
-      
-      sortedGroups.forEach(group => {
-        issuesHTML += `
-          <div class="issue-item ${group.severity}">
-            <div class="issue-header">
-              <span class="issue-severity ${group.severity}">${group.severity}</span>
-              <span>${group.element}</span>
-              <span class="issue-count">×${group.count}</span>
-            </div>
-            <div class="issue-message">${group.message}</div>
-            ${group.examples.length > 0 ? `
-              <details class="issue-details">
-                <summary>Show examples (${Math.min(3, group.count)})</summary>
-                <div class="issue-examples">
-                  ${group.examples.map(path => `<div class="issue-path">${this.escape(path)}</div>`).join('')}
-                  ${group.count > 3 ? `<div class="issue-more">...and ${group.count - 3} more</div>` : ''}
-                </div>
-              </details>
-            ` : ''}
-          </div>
-        `;
-      });
+
+    const statsContainer = document.getElementById('a11y-stats');
+    if (statsContainer) {
+      statsContainer.textContent = '';
+      const grid = document.createElement('div');
+      grid.className = 'stats-grid';
+      grid.appendChild(this.createStatCard(stats.landmarks, 'Landmarks'));
+      grid.appendChild(this.createStatCard(stats.headings, 'Headings'));
+      grid.appendChild(this.createStatCard(`${stats.altText}/${stats.totalImages}`, 'Alt Text'));
+      grid.appendChild(this.createStatCard(issues.length, 'Issues'));
+      statsContainer.appendChild(grid);
     }
-    
-    document.getElementById('a11y-issues').innerHTML = issuesHTML;
+
+    const issuesContainer = document.getElementById('a11y-issues');
+    if (!issuesContainer) return;
+
+    issuesContainer.textContent = '';
+
+    if (issues.length === 0) {
+      issuesContainer.appendChild(this.createEmptyStateElement('✅', 'No accessibility issues found'));
+      return;
+    }
+
+    issuesContainer.appendChild(this.createSectionHeader('Issues Summary'));
+
+    // Group by type and severity
+    const grouped = {};
+    issues.forEach(issue => {
+      const key = `${issue.severity}-${issue.type}-${issue.message}`;
+      if (!grouped[key]) {
+        grouped[key] = {
+          severity: issue.severity,
+          type: issue.type,
+          message: issue.message,
+          element: issue.element,
+          count: 0,
+          examples: []
+        };
+      }
+      grouped[key].count++;
+      if (grouped[key].examples.length < 3) {
+        grouped[key].examples.push(issue.path);
+      }
+    });
+
+    // Sort by severity (errors first)
+    const sortedGroups = Object.values(grouped).sort((a, b) => {
+      if (a.severity === 'error' && b.severity !== 'error') return -1;
+      if (a.severity !== 'error' && b.severity === 'error') return 1;
+      return b.count - a.count;
+    });
+
+    sortedGroups.forEach(group => {
+      const issueItem = document.createElement('div');
+      const severityClass = this.getSeverityClass(group.severity);
+      issueItem.className = `issue-item ${severityClass}`;
+
+      const issueHeader = document.createElement('div');
+      issueHeader.className = 'issue-header';
+
+      const severity = document.createElement('span');
+      severity.className = `issue-severity ${severityClass}`;
+      severity.textContent = group.severity || '';
+
+      const element = document.createElement('span');
+      element.textContent = group.element || '';
+
+      const count = document.createElement('span');
+      count.className = 'issue-count';
+      count.textContent = `×${group.count}`;
+
+      issueHeader.appendChild(severity);
+      issueHeader.appendChild(element);
+      issueHeader.appendChild(count);
+
+      const issueMessage = document.createElement('div');
+      issueMessage.className = 'issue-message';
+      issueMessage.textContent = group.message || '';
+
+      issueItem.appendChild(issueHeader);
+      issueItem.appendChild(issueMessage);
+
+      if (group.examples.length > 0) {
+        const details = document.createElement('details');
+        details.className = 'issue-details';
+
+        const summary = document.createElement('summary');
+        summary.textContent = `Show examples (${Math.min(3, group.count)})`;
+        details.appendChild(summary);
+
+        const examples = document.createElement('div');
+        examples.className = 'issue-examples';
+        group.examples.forEach(path => {
+          const example = document.createElement('div');
+          example.className = 'issue-path';
+          example.textContent = path;
+          examples.appendChild(example);
+        });
+
+        if (group.count > 3) {
+          const more = document.createElement('div');
+          more.className = 'issue-more';
+          more.textContent = `...and ${group.count - 3} more`;
+          examples.appendChild(more);
+        }
+
+        details.appendChild(examples);
+        issueItem.appendChild(details);
+      }
+
+      issuesContainer.appendChild(issueItem);
+    });
   }
   
   async highlightAll() {
@@ -555,7 +695,7 @@ class SidebarUI {
       alert('No data to export. Please analyze a page first.');
       return;
     }
-    
+
     // Create organized, readable JSON structure
     const organized = {
       metadata: {
@@ -566,7 +706,7 @@ class SidebarUI {
         viewport: this.data.meta.viewport,
         exportedAt: new Date().toISOString()
       },
-      
+
       structure: {
         landmarks: this.data.structure.landmarks.map(l => ({
           type: l.type,
@@ -574,22 +714,29 @@ class SidebarUI {
           id: l.id,
           path: l.path
         })),
-        
+
         headings: this.data.structure.headings.map(h => ({
           level: h.level,
           text: h.text,
           id: h.id,
           path: h.path
         })),
-        
+
         sections: this.data.structure.sections.map(s => ({
           type: s.type,
           heading: s.heading,
           id: s.id,
-          wordCount: s.wordCount
+          wordCount: s.wordCount,
+          text: s.text,
+          articles: s.articles?.map(a => ({
+            heading: a.heading,
+            id: a.id,
+            wordCount: a.wordCount,
+            text: a.text
+          }))
         }))
       },
-      
+
       interactive: {
         count: this.data.interactive.length,
         elements: this.data.interactive.map(el => ({
@@ -604,7 +751,7 @@ class SidebarUI {
           path: el.path
         }))
       },
-      
+
       accessibility: {
         statistics: {
           landmarks: this.data.accessibility.stats.landmarks,
@@ -615,7 +762,7 @@ class SidebarUI {
             missingAltText: this.data.accessibility.stats.totalImages - this.data.accessibility.stats.altText
           }
         },
-        
+
         issues: {
           total: this.data.accessibility.issues.length,
           byType: this.groupIssuesByType(this.data.accessibility.issues),
@@ -627,18 +774,26 @@ class SidebarUI {
             path: issue.path
           }))
         }
-      }
+      },
+
+      // New comprehensive data fields
+      textBlocks: this.data.textBlocks || [],
+      semanticStructure: this.data.semanticStructure || {},
+      brailleMap: this.data.brailleMap || '',
+      agentBrief: this.data.agentBrief || {},
+      pageAnatomy: this.data.pageAnatomy || {},
+      attributedContent: this.data.attributedContent || {}
     };
-    
+
     const json = JSON.stringify(organized, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    
+
     const a = document.createElement('a');
     a.href = url;
     a.download = `pagescope-${this.getFilename()}.json`;
     a.click();
-    
+
     URL.revokeObjectURL(url);
   }
   
@@ -715,24 +870,54 @@ class SidebarUI {
           md += `### Section${section.heading ? ': ' + this.escapeMarkdown(section.heading) : ''}\n\n`;
           md += `- **Word Count:** ${section.wordCount}\n`;
           if (section.id) md += `- **ID:** \`${this.escapeCodeBlock(section.id)}\`\n`;
-          md += `- **Path:** \`${this.escapeCodeBlock(section.path)}\`\n`;
+          md += `- **Path:** \`${this.escapeCodeBlock(section.path)}\`\n\n`;
+
+          // Section text content
+          if (section.text && section.text.length > 0) {
+            const wrappedText = this.escapeMarkdown(section.text);
+            md += `${wrappedText}\n\n`;
+          }
 
           // Nested articles
           if (section.articles && section.articles.length > 0) {
-            md += `\n**Articles in this section:**\n\n`;
+            md += `**Articles in this section:**\n\n`;
             section.articles.forEach(article => {
-              md += `  - ${this.escapeMarkdown(article.heading || 'Untitled')} (${article.wordCount} words)\n`;
-              if (article.id) md += `    - ID: \`${this.escapeCodeBlock(article.id)}\`\n`;
-              md += `    - Path: \`${this.escapeCodeBlock(article.path)}\`\n`;
+              md += `#### ${this.escapeMarkdown(article.heading || 'Untitled')} (${article.wordCount} words)\n\n`;
+              if (article.id) md += `- **ID:** \`${this.escapeCodeBlock(article.id)}\`\n`;
+              md += `- **Path:** \`${this.escapeCodeBlock(article.path)}\`\n\n`;
+
+              // Article text content
+              if (article.text && article.text.length > 0) {
+                const wrappedText = this.escapeMarkdown(article.text);
+                md += `${wrappedText}\n\n`;
+              }
             });
           }
-          md += '\n';
         } else {
           // Standalone article
           md += `### Article: ${this.escapeMarkdown(section.heading || 'Untitled')}\n\n`;
           md += `- **Word Count:** ${section.wordCount}\n`;
           if (section.id) md += `- **ID:** \`${this.escapeCodeBlock(section.id)}\`\n`;
           md += `- **Path:** \`${this.escapeCodeBlock(section.path)}\`\n\n`;
+
+          // Article text content
+          if (section.text && section.text.length > 0) {
+            const wrappedText = this.escapeMarkdown(section.text);
+            md += `${wrappedText}\n\n`;
+          }
+        }
+      });
+    }
+
+    // Add extracted text blocks (especially useful for Shadow DOM content)
+    if (this.data.textBlocks && this.data.textBlocks.length > 0) {
+      md += `## Text Content (${this.data.textBlocks.length} blocks)\n\n`;
+
+      this.data.textBlocks.forEach((block, idx) => {
+        const cleanText = this.escapeMarkdown(block.text);
+        // Only show blocks with substantial content
+        if (block.wordCount >= 5) {
+          md += `${cleanText}\n\n`;
         }
       });
     }
@@ -829,8 +1014,8 @@ class SidebarUI {
     return str.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
-  exportText() {
-    console.log('[PageScope] exportText called, data:', this.data ? 'present' : 'null');
+  exportBraille() {
+    console.log('[PageScope] exportBraille called, data:', this.data ? 'present' : 'null');
     if (!this.data) {
       alert('No data to export. Please analyze a page first.');
       return;
@@ -838,127 +1023,353 @@ class SidebarUI {
 
     let text = '';
 
-    // Page title and URL
-    const title = this.cleanText(this.data.meta.title);
-    text += `${title}\n`;
-    text += `${'='.repeat(title.length)}\n\n`;
-    text += `URL: ${this.data.meta.url}\n\n`;
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 1: AGENT BRIEF (Quick Orientation)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    text += '╔' + '═'.repeat(78) + '╗\n';
+    text += '║' + '                         PAGESCOPE AGENT BRIEF'.padEnd(78) + '║\n';
+    text += '╚' + '═'.repeat(78) + '╝\n\n';
 
-    // Landmarks and their text content
-    const landmarks = this.data.structure.landmarks;
+    if (this.data.agentBrief) {
+      const brief = this.data.agentBrief;
 
-    landmarks.forEach(landmark => {
-      if (landmark.type === 'header' || landmark.type === 'banner') {
-        text += `[HEADER]\n`;
-        text += `${'-'.repeat(80)}\n`;
+      // Page classification
+      const typeStr = brief.pageSubType
+        ? `${brief.pageType} (${brief.pageSubType})`
+        : brief.pageType;
+      text += `PAGE TYPE: ${typeStr} [confidence: ${Math.round(brief.confidence * 100)}%]\n`;
+      text += `SITE: ${brief.site}\n`;
+      text += `URL: ${brief.url}\n\n`;
 
-        // Get header text from interactive elements (nav links, etc.)
-        const headerElements = this.data.interactive.filter(el =>
-          el.bounds.y < 150 && el.label
-        );
-        headerElements.slice(0, 10).forEach(el => {
-          text += `${this.cleanText(el.label)}\n`;
-        });
-        text += `\n`;
+      // Primary content
+      if (brief.primaryContent) {
+        text += 'PRIMARY CONTENT:\n';
+        if (brief.primaryContent.title) {
+          text += `  Title: "${this.cleanText(brief.primaryContent.title).slice(0, 60)}"\n`;
+        }
+        if (brief.primaryContent.author) {
+          text += `  Author: ${brief.primaryContent.author}\n`;
+        }
+        if (brief.primaryContent.source) {
+          text += `  Source: ${brief.primaryContent.source}\n`;
+        }
+        if (brief.primaryContent.timestamp) {
+          text += `  Posted: ${brief.primaryContent.timestamp}\n`;
+        }
+        text += '\n';
       }
-    });
 
-    // Main content sections
-    const main = landmarks.find(l => l.type === 'main');
-    if (main) {
-      text += `[MAIN CONTENT]\n`;
-      text += `${'-'.repeat(80)}\n\n`;
+      // Engagement metrics
+      if (brief.engagement) {
+        const engParts = [];
+        if (brief.engagement.votes) engParts.push(`${brief.engagement.votes} votes`);
+        if (brief.engagement.comments) engParts.push(`${brief.engagement.comments} comments`);
+        if (engParts.length > 0) {
+          text += `ENGAGEMENT: ${engParts.join(' | ')}\n\n`;
+        }
+      }
+
+      // Available actions
+      if (brief.availableActions && brief.availableActions.length > 0) {
+        text += 'AVAILABLE ACTIONS:\n';
+        brief.availableActions.forEach(action => {
+          let actionDesc = `  ✓ ${action.action}`;
+          if (action.type) actionDesc += ` (${action.type})`;
+          if (action.supports) actionDesc += ` [supports: ${action.supports.join(', ')}]`;
+          if (action.authenticated) actionDesc += ' *requires auth*';
+          if (action.destinations) actionDesc += ` → ${action.destinations} destinations`;
+          text += actionDesc + '\n';
+        });
+        text += '\n';
+      }
+
+      // Key elements summary
+      if (brief.keyElements) {
+        const elements = [];
+        if (brief.keyElements.hasComments) elements.push('comments');
+        if (brief.keyElements.hasForm) elements.push('forms');
+        if (brief.keyElements.hasMedia) elements.push('media');
+        if (brief.keyElements.hasImages) elements.push(`${brief.keyElements.hasImages} images`);
+        if (elements.length > 0) {
+          text += `KEY ELEMENTS: ${elements.join(', ')}\n\n`;
+        }
+      }
     }
 
-    // Headings with hierarchy
-    if (this.data.structure.headings.length > 0) {
-      this.data.structure.headings.forEach(heading => {
-        const indent = '  '.repeat(heading.level - 1);
-        text += `${indent}${this.cleanText(heading.text)}\n`;
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 2: PAGE ANATOMY (Hierarchical Structure)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    text += '═'.repeat(80) + '\n';
+    text += '                         PAGE ANATOMY\n';
+    text += '═'.repeat(80) + '\n\n';
+
+    if (this.data.pageAnatomy) {
+      const renderTree = (node, prefix = '', isLast = true) => {
+        if (!node) return '';
+        let result = '';
+
+        const connector = isLast ? '└─' : '├─';
+        const typeMarker = node.type.match(/^[A-Z]/) ? `[${node.type}]` : `[${node.type}]`;
+        const spatialHint = node.spatial ? ` (${node.spatial})` : '';
+
+        // Format label
+        let labelStr = '';
+        if (node.label) {
+          labelStr = ` "${this.cleanText(node.label).slice(0, 40)}"`;
+        }
+
+        // Interactive info
+        let interactiveStr = '';
+        if (node.interactive) {
+          if (node.interactive.type === 'button') {
+            interactiveStr = ` → ${node.interactive.action || 'click'}`;
+          } else if (node.interactive.type === 'link') {
+            interactiveStr = ` → ${node.interactive.destination?.slice(0, 30) || 'navigate'}`;
+          } else if (node.interactive.type === 'form') {
+            interactiveStr = ` [${node.interactive.fieldCount} fields]`;
+          }
+        }
+
+        result += `${prefix}${connector} ${typeMarker}${labelStr}${spatialHint}${interactiveStr}\n`;
+
+        if (node.children && node.children.length > 0) {
+          const childPrefix = prefix + (isLast ? '   ' : '│  ');
+          node.children.forEach((child, idx) => {
+            result += renderTree(child, childPrefix, idx === node.children.length - 1);
+          });
+        }
+
+        return result;
+      };
+
+      // Render children of the page root
+      if (this.data.pageAnatomy.children) {
+        this.data.pageAnatomy.children.forEach((child, idx) => {
+          text += renderTree(child, '', idx === this.data.pageAnatomy.children.length - 1);
+        });
+      }
+      text += '\n';
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 3: ATTRIBUTED CONTENT (Comments/Posts with Context)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    if (this.data.attributedContent && this.data.attributedContent.length > 0) {
+      text += '═'.repeat(80) + '\n';
+      text += '                         CONTENT EXTRACTION\n';
+      text += '═'.repeat(80) + '\n\n';
+
+      // Article first
+      const articles = this.data.attributedContent.filter(c => c.type === 'article');
+      const comments = this.data.attributedContent.filter(c => c.type === 'comment');
+
+      articles.forEach(article => {
+        text += `[ARTICLE]\n`;
+        if (article.title) text += `  Title: ${this.cleanText(article.title)}\n`;
+        if (article.source) text += `  Source: ${article.source}\n`;
+        if (article.summary) {
+          text += `  Summary: ${this.cleanText(article.summary).slice(0, 200)}...\n`;
+        }
+        text += '\n';
       });
-      text += `\n`;
-    }
 
-    // Sections and articles with their text content
-    if (this.data.structure.sections.length > 0) {
-      text += `\n[SECTIONS]\n`;
-      text += `${'-'.repeat(80)}\n`;
+      if (comments.length > 0) {
+        text += `[COMMENTS] (${comments.length} total)\n\n`;
 
-      this.data.structure.sections.forEach((section, idx) => {
-        if (section.type === 'section') {
-          // Section with potential nested articles
-          const heading = this.cleanText(section.heading || `Section ${idx + 1}`);
-          text += `\nSection: ${heading}\n`;
-          text += `  Word count: ${section.wordCount}\n`;
+        comments.forEach((comment, idx) => {
+          // Header line
+          let header = `  ${idx + 1}. `;
+          if (comment.author) header += `${comment.author}`;
+          if (comment.timestamp) header += ` • ${comment.timestamp}`;
+          if (comment.engagement?.votes) header += ` • ${comment.engagement.votes} votes`;
+          text += header + '\n';
 
-          if (section.articles && section.articles.length > 0) {
-            text += `  Articles (${section.articles.length}):\n`;
-            section.articles.forEach(article => {
-              text += `    - ${this.cleanText(article.heading || 'Untitled')} (${article.wordCount} words)\n`;
+          // Content
+          if (comment.text) {
+            const wrapped = this.wrapText(this.cleanText(comment.text), 70, '     ');
+            text += wrapped + '\n';
+          }
+
+          // Links
+          if (comment.links && comment.links.length > 0) {
+            comment.links.forEach(link => {
+              text += `     [link] ${link.url.slice(0, 60)}\n`;
             });
           }
+
+          // Actions
+          if (comment.actions && comment.actions.length > 0) {
+            text += `     → can: ${comment.actions.join(', ')}\n`;
+          }
+
           text += '\n';
-        } else {
-          // Standalone article
-          const heading = this.cleanText(section.heading || `Article ${idx + 1}`);
-          text += `\nArticle: ${heading} (${section.wordCount} words)\n\n`;
-        }
-      });
+        });
+      }
     }
 
-    // Comments or interactive text (if detected)
-    const commentElements = this.data.interactive.filter(el =>
-      el.label && el.label.length > 50 // Likely comment or long text
-    );
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 4: BRAILLE TACTILE MAP (Ambient)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    if (this.data.brailleMap) {
+      text += '═'.repeat(80) + '\n';
+      text += '                         TACTILE MAP (Braille - Ambient)\n';
+      text += '═'.repeat(80) + '\n\n';
 
-    if (commentElements.length > 0) {
-      text += `[COMMENTS / INTERACTIVE TEXT]\n`;
-      text += `${'-'.repeat(80)}\n\n`;
+      text += 'LEGEND:\n';
+      text += '  ⣿ HEADER  ⣶ NAV  ⣤ MAIN  ⣴ ASIDE  ⣀ FOOTER\n';
+      text += '  ⠿ button  ⠗ link  ⠶ input  ⠻ image  ⠛ heading\n\n';
 
-      commentElements.forEach((el, idx) => {
-        text += `Comment ${idx + 1}:\n`;
-        const cleanedLabel = this.cleanText(el.label);
+      text += this.data.brailleMap.grid + '\n\n';
+    }
 
-        // Wrap long comments at 80 characters
-        const words = cleanedLabel.split(' ');
-        let line = '';
-        words.forEach(word => {
-          if (line.length + word.length + 1 > 80) {
-            if (line) text += `${line}\n`;
-            line = word;
-          } else {
-            line += (line ? ' ' : '') + word;
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 5: SEMANTIC STRUCTURE (Accessibility Tree)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    if (this.data.semanticStructure) {
+      const sem = this.data.semanticStructure;
+
+      // Document outline
+      if (sem.documentOutline && sem.documentOutline.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                         DOCUMENT OUTLINE\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        sem.documentOutline.forEach(h => {
+          const indent = '  '.repeat(h.level - 1);
+          text += `${indent}H${h.level}: ${this.cleanText(h.text).slice(0, 60)}\n`;
+        });
+        text += '\n';
+      }
+
+      // Landmarks
+      if (sem.landmarks && sem.landmarks.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                         LANDMARK REGIONS\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        const byRole = {};
+        sem.landmarks.forEach(l => {
+          if (!byRole[l.role]) byRole[l.role] = [];
+          byRole[l.role].push(l);
+        });
+
+        for (const [role, items] of Object.entries(byRole)) {
+          text += `[${role.toUpperCase()}]\n`;
+          items.forEach(l => {
+            text += `  • ${l.name}${l.hasAriaLabel ? ' (labeled)' : ''}\n`;
+          });
+        }
+        text += '\n';
+      }
+
+      // Forms
+      if (sem.forms && sem.forms.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                         FORM STRUCTURE\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        sem.forms.forEach((form, idx) => {
+          text += `Form ${idx + 1}: ${this.cleanText(form.name)}\n`;
+          form.fields.forEach(f => {
+            const states = [];
+            if (f.required) states.push('required');
+            if (f.disabled) states.push('disabled');
+            text += `  • [${f.type}] ${f.label || '(unlabeled)'}${states.length ? ' [' + states.join(',') + ']' : ''}\n`;
+          });
+          text += '\n';
+        });
+      }
+
+      // Interactive with states
+      const withStates = sem.interactiveElements?.filter(e => Object.keys(e.states).length > 0) || [];
+      if (withStates.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                         INTERACTIVE STATES\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        withStates.slice(0, 20).forEach(el => {
+          const stateStr = Object.entries(el.states)
+            .map(([k, v]) => v === true ? k : `${k}=${v}`)
+            .join(', ');
+          text += `• [${el.role}] ${this.cleanText(el.name).slice(0, 40)}\n`;
+          text += `  States: ${stateStr}\n`;
+        });
+        text += '\n';
+      }
+
+      // ARIA relationships
+      if (sem.relationships && sem.relationships.length > 0) {
+        text += '═'.repeat(80) + '\n';
+        text += '                         ARIA RELATIONSHIPS\n';
+        text += '═'.repeat(80) + '\n\n';
+
+        sem.relationships.slice(0, 15).forEach(rel => {
+          text += `• [${rel.source.role}] ${rel.source.name || '?'}\n`;
+          for (const [attr, targets] of Object.entries(rel.relationships)) {
+            text += `  ${attr}: ${targets.map(t => t.id).join(', ')}\n`;
           }
         });
-        if (line) text += `${line}\n`;
-        text += `\n`;
-      });
+        text += '\n';
+      }
     }
 
-    // Footer
-    const footer = landmarks.find(l => l.type === 'footer' || l.type === 'contentinfo');
-    if (footer) {
-      text += `[FOOTER]\n`;
-      text += `${'-'.repeat(80)}\n`;
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SECTION 6: MACHINE-READABLE (JSON)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    text += '═'.repeat(80) + '\n';
+    text += '                         MACHINE-READABLE (JSON)\n';
+    text += '═'.repeat(80) + '\n\n';
 
-      const footerLinks = this.data.interactive.filter(el =>
-        el.role === 'link' && el.bounds.y > this.data.meta.viewport.height * 0.85
-      );
+    const machineData = {
+      pageType: this.data.agentBrief?.pageType,
+      pageSubType: this.data.agentBrief?.pageSubType,
+      url: this.data.meta?.url,
+      title: this.data.meta?.title,
+      actions: this.data.agentBrief?.availableActions?.map(a => a.action) || [],
+      engagement: this.data.agentBrief?.engagement,
+      landmarks: this.data.structure?.landmarks?.length || 0,
+      headings: this.data.structure?.headings?.length || 0,
+      interactive: this.data.interactive?.length || 0,
+      comments: this.data.attributedContent?.filter(c => c.type === 'comment').length || 0,
+      issues: this.data.accessibility?.issues?.length || 0
+    };
 
-      footerLinks.slice(0, 10).forEach(link => {
-        if (link.label) text += `${this.cleanText(link.label)}\n`;
-      });
-    }
+    text += JSON.stringify(machineData, null, 2) + '\n\n';
 
-    const blob = new Blob([text], { type: 'text/plain' });
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // FOOTER
+    // ═══════════════════════════════════════════════════════════════════════════════
+    text += '─'.repeat(80) + '\n';
+    text += `Exported: ${new Date().toISOString()}\n`;
+    text += `PageScope v0.2.0 | Agent-Focused Export\n`;
+
+    const blob = new Blob([text], { type: 'text/plain; charset=utf-8' });
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pagescope-text-${this.getFilename()}.txt`;
+    a.download = `pagescope-agent-${this.getFilename()}.txt`;
     a.click();
 
     URL.revokeObjectURL(url);
+  }
+
+  wrapText(text, width, indent = '') {
+    const words = text.split(/\s+/);
+    let lines = [];
+    let line = indent;
+
+    words.forEach(word => {
+      if (line.length + word.length + 1 > width) {
+        lines.push(line);
+        line = indent + word;
+      } else {
+        line += (line.length > indent.length ? ' ' : '') + word;
+      }
+    });
+    if (line.length > indent.length) lines.push(line);
+
+    return lines.join('\n');
   }
 
   escapeMermaid(text) {
@@ -1011,16 +1422,24 @@ class SidebarUI {
     return icons[role] || '▪️';
   }
   
-  getStateHTML(state, inViewport) {
-    const badges = [];
-    
-    if (state.disabled) badges.push('<span class="state-badge disabled">disabled</span>');
-    if (state.checked) badges.push('<span class="state-badge checked">checked</span>');
-    if (state.required) badges.push('<span class="state-badge required">required</span>');
-    if (state.expanded) badges.push('<span class="state-badge expanded">expanded</span>');
-    if (inViewport) badges.push('<span class="state-badge viewport">in view</span>');
-    
-    return badges.join('');
+  createStateBadge(text, className) {
+    const badge = document.createElement('span');
+    badge.className = `state-badge ${className}`;
+    badge.textContent = text;
+    return badge;
+  }
+
+  getStateBadges(state, inViewport) {
+    const fragment = document.createDocumentFragment();
+    if (!state) return fragment;
+
+    if (state.disabled) fragment.appendChild(this.createStateBadge('disabled', 'disabled'));
+    if (state.checked) fragment.appendChild(this.createStateBadge('checked', 'checked'));
+    if (state.required) fragment.appendChild(this.createStateBadge('required', 'required'));
+    if (state.expanded) fragment.appendChild(this.createStateBadge('expanded', 'expanded'));
+    if (inViewport) fragment.appendChild(this.createStateBadge('in view', 'viewport'));
+
+    return fragment;
   }
   
   escape(text) {

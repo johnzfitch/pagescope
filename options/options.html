@@ -15,7 +15,42 @@
         Auto-refresh on page navigation
       </label>
     </section>
-    
+
+    <section>
+      <h2>Braille Map Resolution</h2>
+      <p>Configure the spatial map detail level. Higher resolution provides more detail but uses more tokens.</p>
+
+      <label>
+        <input type="radio" name="braille-resolution" value="full">
+        <strong>Full (80x50)</strong> - High fidelity inspection (~4000 chars)
+      </label>
+
+      <label>
+        <input type="radio" name="braille-resolution" value="high">
+        <strong>High (40x10)</strong> - Clear app type and regions (~400 chars, ~140 tokens)
+      </label>
+
+      <label>
+        <input type="radio" name="braille-resolution" value="standard" checked>
+        <strong>Standard (30x8)</strong> - RECOMMENDED for ambient awareness (~240 chars, ~90 tokens)
+      </label>
+
+      <label>
+        <input type="radio" name="braille-resolution" value="compact">
+        <strong>Compact (25x6)</strong> - Token-constrained environments (~150 chars, ~60 tokens)
+      </label>
+
+      <label>
+        <input type="radio" name="braille-resolution" value="minimal">
+        <strong>Minimal (20x5)</strong> - MINIMUM viable layout detection (~100 chars, ~40 tokens)
+      </label>
+
+      <p class="help-text">
+        <strong>Tip:</strong> Standard (30x8) provides the best balance between detail and token efficiency.
+        Below Minimal resolution, spatial information degrades significantly.
+      </p>
+    </section>
+
     <section>
       <h2>Advanced</h2>
       <p>Additional features and integrations.</p>
