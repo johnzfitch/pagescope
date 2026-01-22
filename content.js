@@ -370,40 +370,50 @@ class PageScope {
       }
     });
 
-    // Recursively collect all elements including those in shadow DOM
-    // Based on collectAllElementsDeep from query-selector-shadow-dom
+    // Iteratively collect all elements including those in shadow DOM
+    // Uses queue-based traversal to avoid stack overflow on deep DOM trees
     // STEALTH: Use try-catch to silently handle blocked shadow roots
     const collectAllElementsDeep = (root = document.body) => {
       const allElements = [];
+      const queue = [];
 
-      const findAllElements = (nodes) => {
-        for (let i = 0; i < nodes.length; i++) {
-          const el = nodes[i];
-          allElements.push(el);
-
-          // STEALTH: Shadow root access detection mitigation
-          // Check if shadow root exists without throwing errors
-          try {
-            if (el.shadowRoot) {
-              findAllElements(el.shadowRoot.querySelectorAll('*'));
-            }
-          } catch (e) {
-            // Silently skip closed shadow roots or access-denied scenarios
-            // This prevents sites from detecting us via error handling
-          }
-        }
-      };
-
-      // STEALTH: Wrap root shadow check
+      // Seed queue with root's shadow root children (if accessible)
       try {
         if (root.shadowRoot) {
-          findAllElements(root.shadowRoot.querySelectorAll('*'));
+          const shadowNodes = root.shadowRoot.querySelectorAll('*');
+          for (let i = 0; i < shadowNodes.length; i++) {
+            queue.push(shadowNodes[i]);
+          }
         }
       } catch (e) {
-        // Silently skip
+        // Silently skip inaccessible shadow roots
       }
 
-      findAllElements(root.querySelectorAll('*'));
+      // Add all direct descendants of root
+      const rootNodes = root.querySelectorAll('*');
+      for (let i = 0; i < rootNodes.length; i++) {
+        queue.push(rootNodes[i]);
+      }
+
+      // Process queue iteratively (no recursion = no stack overflow)
+      while (queue.length > 0) {
+        const el = queue.shift();
+        allElements.push(el);
+
+        // STEALTH: Shadow root access detection mitigation
+        // Check if shadow root exists without throwing errors
+        try {
+          if (el.shadowRoot) {
+            const shadowNodes = el.shadowRoot.querySelectorAll('*');
+            for (let i = 0; i < shadowNodes.length; i++) {
+              queue.push(shadowNodes[i]);
+            }
+          }
+        } catch (e) {
+          // Silently skip closed shadow roots or access-denied scenarios
+          // This prevents sites from detecting us via error handling
+        }
+      }
 
       return allElements;
     };
