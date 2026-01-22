@@ -1,29 +1,40 @@
 # PageScope - Page Structure & Accessibility Inspector
 
-![shield-security-protection-16x16](.github/assets/icons/shield-security-protection-16x16.png) **Privacy-First Firefox Extension for Web Analysis**
+**Privacy-First Firefox Extension for Web Analysis**
 
 A developer and accessibility tool that visualizes page structure, semantic elements, and interactive components. All analysis happens locally in your browser with zero external data transmission.
 
-## ![tick](.github/assets/icons/tick.png) Features
+## Features
 
 - **Page Structure Visualization**: View landmarks, headings hierarchy, and semantic sections
 - **Interactive Elements Map**: See all buttons, links, and form controls with their states
 - **Accessibility Inspector**: Check for common accessibility issues and ARIA attributes
+- **Braille Spatial Maps**: Generate tactile page wireframes using Unicode Braille patterns
 - **Viewport Filtering**: Focus on elements currently visible to users
-- **Export Capabilities**: Export data as JSON or Markdown for documentation
+- **Export Capabilities**: Export data as JSON, Markdown, or Braille format
 - **Privacy First**: All processing happens locally - no external servers or tracking
 
 ## Installation
 
-### From Firefox Add-ons (Recommended)
-[Available on addons.mozilla.org](https://addons.mozilla.org/) - *Pending Review*
+### From XPI (Recommended)
+
+1. Download `dist/pagescope.xpi` from this repository
+2. Open Firefox and navigate to `about:addons`
+3. Click the gear icon and select "Install Add-on From File..."
+4. Select the downloaded `pagescope.xpi` file
+5. Click "Add" when prompted
 
 ### From Source (Development)
+
 ```bash
 git clone git@github.com:johnzfitch/pagescope.git
 cd pagescope
-# Load in Firefox: about:debugging#/runtime/this-firefox → Load Temporary Add-on → manifest.json
 ```
+
+Then load in Firefox:
+1. Navigate to `about:debugging#/runtime/this-firefox`
+2. Click "Load Temporary Add-on..."
+3. Select `manifest.json` from the cloned directory
 
 ## Usage
 
@@ -33,25 +44,25 @@ cd pagescope
 4. **Highlight**: Click "Highlight All" to visually mark interactive elements
 5. **Export**: Save analysis as JSON or Markdown
 
-## ![shield-security-protection-16x16](.github/assets/icons/shield-security-protection-16x16.png) Privacy & Security
+## Privacy & Security
 
-![tick](.github/assets/icons/tick.png) **Zero telemetry** - No analytics or tracking  
-![tick](.github/assets/icons/tick.png) **No external connections** - All processing is local  
-![tick](.github/assets/icons/tick.png) **Minimal permissions** - Only necessary browser APIs  
-![tick](.github/assets/icons/tick.png) **Open source** - Fully auditable code  
-![tick](.github/assets/icons/tick.png) **On-demand only** - Analyzes pages when you activate it
+- **Zero telemetry** - No analytics or tracking
+- **No external connections** - All processing is local
+- **Minimal permissions** - Only necessary browser APIs
+- **Open source** - Fully auditable code
+- **On-demand only** - Analyzes pages when you activate it
 
-## ![lock](.github/assets/icons/lock.png) Permissions Explained
+## Permissions Explained
 
 ### Required Permissions
 - **activeTab**: Only accesses the page you're currently viewing, and only when you click the extension icon
 - **storage**: Saves your preferences locally in your browser (no cloud sync)
 - **scripting**: Allows the extension to inject the analysis script into the active tab when you activate it
 
-### What We DON'T Ask For
-- ❌ **No "access all websites" permission** - We only access pages when you explicitly click the icon
-- ❌ **No background access** - Extension is completely inactive until you use it
-- ❌ **No browsing history** - We never track or access your browsing activity
+### What We Don't Ask For
+- No "access all websites" permission - We only access pages when you explicitly click the icon
+- No background access - Extension is completely inactive until you use it
+- No browsing history - We never track or access your browsing activity
 
 **Privacy-First Design:** The content script is injected on-demand only when you activate the extension, not automatically on every page you visit.
 
@@ -144,10 +155,10 @@ Copyright (c) 2024 Zack Fitch
 ### For Mozilla Reviewers
 
 This extension is:
-- ![tick](.github/assets/icons/tick.png) **100% open source** - All code available for review
-- ![tick](.github/assets/icons/tick.png) **Privacy-focused** - Zero external connections or data collection
-- ![tick](.github/assets/icons/tick.png) **Self-contained** - No external libraries or CDNs
-- ![tick](.github/assets/icons/tick.png) **Well-documented** - Clear code comments and documentation
+- **100% open source** - All code available for review
+- **Privacy-focused** - Zero external connections or data collection
+- **Self-contained** - No external libraries or CDNs
+- **Well-documented** - Clear code comments and documentation
 
 **Contact during review**: zackfitch1@gmail.com
 

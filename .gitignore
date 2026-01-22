@@ -14,17 +14,15 @@ test.html
 test.js
 
 # Development artifacts
-dist/
 pyghidra_mcp_projects/
 
 # MCP server (separate distribution)
 mcp/
 mcp-server/
 
-# Build artifacts
+# Build artifacts (except release xpi)
 web-ext-artifacts/
 *.zip
-*.xpi
 
 # Model/AI documentation
 *-model.md
