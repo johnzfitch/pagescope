@@ -2,9 +2,9 @@
 
 ## Status
 
-✅ Testing infrastructure installed and ready
-✅ Scripts validated and working
-✅ Firefox detected: Mozilla Firefox 146.0
+Testing infrastructure installed and ready
+Scripts validated and working
+Firefox detected: Mozilla Firefox 146.0
 
 ## Files Installed
 
@@ -154,7 +154,7 @@ node test/scripts/interact.mjs exec "document.querySelector('#export-json').clic
 
 Run these to verify the MVP fixes:
 
-### ✅ Fix 1: No Duplicate Injection
+### Fix 1: No Duplicate Injection
 
 ```bash
 # Should only see one instance
@@ -162,7 +162,7 @@ node test/scripts/interact.mjs exec "window.__pageScopeInitialized"
 # Expected: true (only once, not multiple times)
 ```
 
-### ✅ Fix 2: Ping Handler Works
+### Fix 2: Ping Handler Works
 
 ```bash
 node test/scripts/interact.mjs exec "
@@ -172,7 +172,7 @@ node test/scripts/interact.mjs exec "
 # Expected: "ready"
 ```
 
-### ✅ Fix 3: No Layout Thrashing
+### Fix 3: No Layout Thrashing
 
 ```bash
 # Enable performance monitoring before clicking highlight
@@ -182,7 +182,7 @@ node test/scripts/interact.mjs exec "performance.mark('end'); performance.measur
 # Expected: <100ms for typical page
 ```
 
-### ✅ Fix 4: Shadow DOM Traversal
+### Fix 4: Shadow DOM Traversal
 
 ```bash
 # Navigate to page with shadow DOM

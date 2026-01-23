@@ -563,4 +563,4 @@ Files to check before handback:
 - [ ] No console errors on basic extraction
 - [ ] Screenshots saved to `test/` directory
 
-Good luck debugging! 🐛
+Good luck debugging! 

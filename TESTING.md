@@ -1,6 +1,6 @@
 # PageScope Testing Guide
 
-## Testing Infrastructure Installed ✓
+## Testing Infrastructure Installed 
 
 Firefox extension E2E testing using Marionette protocol (native Firefox automation, no Selenium/geckodriver needed).
 
@@ -39,13 +39,13 @@ node test/scripts/interact.mjs screenshot test/example.png
 ```
 
 This script verifies:
-- ✅ Duplicate injection guard
-- ✅ Ping handler
-- ✅ Extension UUID retrieval
-- ✅ Sidebar loads correctly
-- ✅ Empty state visible
-- ✅ Browser storage access
-- ✅ Screenshot capture
+- Duplicate injection guard
+- Ping handler
+- Extension UUID retrieval
+- Sidebar loads correctly
+- Empty state visible
+- Browser storage access
+- Screenshot capture
 
 ## MVP Verification Commands
 
@@ -134,10 +134,10 @@ Test Scripts (ESM, zero dependencies)
 
 ## Benefits
 
-- ✅ Zero dependencies (native Node.js net module)
-- ✅ Direct Firefox protocol access
-- ✅ Extension background script execution
-- ✅ Browser storage access
-- ✅ Screenshot capture
-- ✅ Unsigned extension loading
-- ✅ Headless mode support
+- Zero dependencies (native Node.js net module)
+- Direct Firefox protocol access
+- Extension background script execution
+- Browser storage access
+- Screenshot capture
+- Unsigned extension loading
+- Headless mode support
