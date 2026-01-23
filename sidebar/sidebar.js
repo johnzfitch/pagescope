@@ -112,20 +112,27 @@ class SidebarUI {
       const tab = tabs[0];
       console.log('[PageScope] Current tab:', tab.id, tab.url);
 
-      // Inject content script directly from sidebar (Firefox 131+ sidebar doesn't trigger action.onClicked)
+      // Check if content script already loaded via ping, inject if not
+      let needsInjection = true;
       try {
-        await browser.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['/content.js']
-        });
-        console.log('[PageScope] Content script injected');
+        await browser.tabs.sendMessage(tab.id, { action: 'ping' });
+        needsInjection = false;
       } catch (e) {
-        console.log('[PageScope] Content script injection note:', e.message);
-        // Script might already be injected or page is restricted
+        // Ping failed - script not loaded
       }
 
-      // Small delay to ensure content script is ready
-      await new Promise(resolve => setTimeout(resolve, 100));
+      if (needsInjection) {
+        try {
+          await browser.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['/content.js']
+          });
+          // Small delay for script initialization
+          await new Promise(resolve => setTimeout(resolve, 50));
+        } catch (e) {
+          console.log('[PageScope] Content script injection note:', e.message);
+        }
+      }
 
       // Load user settings for extraction options
       const settings = await browser.storage.local.get({
@@ -821,6 +828,9 @@ class SidebarUI {
   escapeMarkdown(text) {
     if (!text) return '';
 
+    // Remove zero-width chars that show up as "<200b>" artifacts in some views.
+    text = text.replace(/[\u200B-\u200D\uFEFF]/g, '');
+
     // Remove newlines and extra whitespace
     text = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -839,8 +849,37 @@ class SidebarUI {
   escapeCodeBlock(text) {
     if (!text) return '';
 
-    // For code blocks, just escape backticks and remove newlines
-    return text.replace(/\r?\n/g, ' ').replace(/`/g, '\\`').trim();
+    // For inline code, escape backticks and remove newlines
+    return text
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\r?\n/g, ' ')
+      .replace(/`/g, '\\`')
+      .trim();
+  }
+
+  renderFencedCodeBlock(code, language) {
+    const clean = (code || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\r\n/g, '\n').trim();
+    if (!clean) return '';
+
+    // Use standard fence unless code contains triple backticks
+    const fence = clean.includes('```') ? '````' : '```';
+    const lang = language ? String(language).trim() : '';
+    return `${fence}${lang}\n${clean}\n${fence}\n`;
+  }
+
+  renderCodeBlocks(codeBlocks) {
+    if (!Array.isArray(codeBlocks) || codeBlocks.length === 0) return '';
+
+    const refs = codeBlocks.map((_, idx) => `[${idx + 1}]`).join(' ');
+    let out = `**Code:** ${refs}\n\n`;
+
+    codeBlocks.forEach((block, idx) => {
+      out += `[${idx + 1}] Block ${idx + 1}\n`;
+      out += this.renderFencedCodeBlock(block.code, block.language);
+      out += '\n';
+    });
+
+    return out;
   }
 
   exportMarkdown() {
@@ -878,20 +917,37 @@ class SidebarUI {
             md += `${wrappedText}\n\n`;
           }
 
+          // Section code blocks (rendered separately so code keeps formatting)
+          if (section.codeBlocks && section.codeBlocks.length > 0) {
+            md += this.renderCodeBlocks(section.codeBlocks);
+          }
+
           // Nested articles
           if (section.articles && section.articles.length > 0) {
-            md += `**Articles in this section:**\n\n`;
-            section.articles.forEach(article => {
-              md += `#### ${this.escapeMarkdown(article.heading || 'Untitled')} (${article.wordCount} words)\n\n`;
-              if (article.id) md += `- **ID:** \`${this.escapeCodeBlock(article.id)}\`\n`;
-              md += `- **Path:** \`${this.escapeCodeBlock(article.path)}\`\n\n`;
+            // Skip redundant header when single article matches section heading
+            const sectionKey = (section.heading || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const skipHeaders = section.articles.length === 1 &&
+              sectionKey && sectionKey === (section.articles[0].heading || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
-              // Article text content
-              if (article.text && article.text.length > 0) {
-                const wrappedText = this.escapeMarkdown(article.text);
-                md += `${wrappedText}\n\n`;
+            if (!skipHeaders) {
+              md += `**Articles in this section:**\n\n`;
+            }
+
+            for (const article of section.articles) {
+              if (!skipHeaders) {
+                md += `#### ${this.escapeMarkdown(article.heading || 'Untitled')} (${article.wordCount} words)\n\n`;
+                if (article.id) md += `- **ID:** \`${this.escapeCodeBlock(article.id)}\`\n`;
+                md += `- **Path:** \`${this.escapeCodeBlock(article.path)}\`\n\n`;
               }
-            });
+
+              if (article.text) {
+                md += `${this.escapeMarkdown(article.text)}\n\n`;
+              }
+
+              if (article.codeBlocks && article.codeBlocks.length > 0) {
+                md += this.renderCodeBlocks(article.codeBlocks);
+              }
+            }
           }
         } else {
           // Standalone article
@@ -905,21 +961,50 @@ class SidebarUI {
             const wrappedText = this.escapeMarkdown(section.text);
             md += `${wrappedText}\n\n`;
           }
+
+          // Article code blocks
+          if (section.codeBlocks && section.codeBlocks.length > 0) {
+            md += this.renderCodeBlocks(section.codeBlocks);
+          }
         }
       });
     }
 
-    // Add extracted text blocks (especially useful for Shadow DOM content)
+    // Add text blocks that aren't already captured in sections/articles
+    // Dedupe using hash of first 200 chars to reduce memory on large pages
     if (this.data.textBlocks && this.data.textBlocks.length > 0) {
-      md += `## Text Content (${this.data.textBlocks.length} blocks)\n\n`;
+      const hashKey = (text) => (text || '').trim().slice(0, 200);
 
-      this.data.textBlocks.forEach((block, idx) => {
-        const cleanText = this.escapeMarkdown(block.text);
-        // Only show blocks with substantial content
-        if (block.wordCount >= 5) {
-          md += `${cleanText}\n\n`;
+      // Collect hashes of text already included from sections/articles
+      const includedHashes = new Set();
+      if (this.data.structure.sections) {
+        for (const section of this.data.structure.sections) {
+          if (section.text) includedHashes.add(hashKey(section.text));
+          if (section.articles) {
+            for (const article of section.articles) {
+              if (article.text) includedHashes.add(hashKey(article.text));
+            }
+          }
         }
+      }
+
+      // Filter to additional text blocks not already included
+      const seenHashes = new Set();
+      const additionalBlocks = this.data.textBlocks.filter(block => {
+        const key = hashKey(block.text);
+        if (!key) return false;
+        if (includedHashes.has(key) || seenHashes.has(key)) return false;
+        seenHashes.add(key);
+        return true;
       });
+
+      if (additionalBlocks.length > 0) {
+        md += `## Additional Text Blocks (${additionalBlocks.length})\n\n`;
+        for (const block of additionalBlocks) {
+          const cleanText = this.escapeMarkdown(block.text);
+          if (cleanText) md += `${cleanText}\n\n`;
+        }
+      }
     }
 
     if (this.data.interactive.length > 0) {
@@ -931,10 +1016,9 @@ class SidebarUI {
         if (el.state.required) state.push('required');
         const stateStr = state.length > 0 ? ` [${state.join(', ')}]` : '';
         const label = this.escapeMarkdown(el.label || '(unlabeled)');
-        md += `- **[${el.id}]** ${el.role}: ${label}${stateStr}\n`;
-        if (el.path) {
-          md += `  - Path: \`${this.escapeCodeBlock(el.path)}\`\n`;
-        }
+        // Keep interactive elements on a single line (less verbose, easier to scan).
+        const path = el.path ? ` \`${this.escapeCodeBlock(el.path)}\`` : '';
+        md += `- **[${el.id}]** ${label} (${el.role}${stateStr})${path}\n`;
       });
       md += '\n';
     }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PageScope - Page Structure Inspector",
-  "version": "1.0.0",
+  "version": "0.0.6",
   "description": "Analyze page structure, accessibility tree, and interactive elements. Export detailed reports in JSON, Markdown, or plain text formats.",
 
   "icons": {
@@ -11,7 +11,6 @@
 
   "permissions": [
     "activeTab",
-    "tabs",
     "storage",
     "scripting"
   ],
@@ -20,11 +19,6 @@
     "<all_urls>"
   ],
 
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-  }],
 
   "action": {
     "default_icon": "icons/icon-48.png",
@@ -52,7 +46,13 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "pagescope@internetuniverse.org",
-      "strict_min_version": "140.0"
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
     }
   },
 
