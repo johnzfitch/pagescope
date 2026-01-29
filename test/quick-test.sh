@@ -20,7 +20,13 @@ echo ""
 # Build extension
 echo "Building extension..."
 if bash build.sh >/dev/null 2>&1; then
-  echo "  ✓ Built: dist/pagescope-v0.0.6.xpi"
+  # Find the built XPI (versioned filename)
+  XPI=$(ls -t dist/pagescope-v*.xpi 2>/dev/null | head -1)
+  if [ -n "$XPI" ]; then
+    echo "  ✓ Built: $XPI"
+  else
+    echo "  ✓ Built: dist/pagescope.xpi"
+  fi
 else
   echo "  ✗ Build failed"
   exit 1
@@ -63,7 +69,7 @@ echo "========================================="
 echo ""
 echo "Try these commands in another terminal:"
 echo ""
-echo "  cd /home/zack/dev/pagescope-extension"
+echo "  cd $(pwd)"
 echo ""
 echo "  # Basic navigation"
 echo "  node test/scripts/interact.mjs navigate \"https://example.com\""

@@ -3,7 +3,6 @@
 
 import { Marionette } from './marionette.mjs';
 import fs from 'fs';
-import path from 'path';
 
 export class ExtensionTester {
   constructor(host = 'localhost', port = 2828) {

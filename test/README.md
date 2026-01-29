@@ -26,7 +26,7 @@ test/
 
 ```bash
 # Terminal 1: Launch Firefox (headless or GUI)
-cd /home/zack/dev/pagescope-extension
+cd <repo-root>
 test/scripts/launch.sh .
 
 # Or headless:
@@ -37,7 +37,7 @@ HEADLESS=1 test/scripts/launch.sh .
 
 ```bash
 # Terminal 2: Run automation commands
-cd /home/zack/dev/pagescope-extension
+cd <repo-root>
 
 # Basic navigation
 node test/scripts/interact.mjs navigate "https://example.com"

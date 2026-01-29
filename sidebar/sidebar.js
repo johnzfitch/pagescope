@@ -861,8 +861,10 @@ class SidebarUI {
     const clean = (code || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\r\n/g, '\n').trim();
     if (!clean) return '';
 
-    // Use standard fence unless code contains triple backticks
-    const fence = clean.includes('```') ? '````' : '```';
+    // Choose fence length one longer than the longest backtick run in the code
+    const backtickRuns = clean.match(/`+/g) || [];
+    const maxRunLength = backtickRuns.length ? Math.max(...backtickRuns.map(run => run.length)) : 0;
+    const fence = '`'.repeat(Math.max(3, maxRunLength + 1));
     const lang = language ? String(language).trim() : '';
     return `${fence}${lang}\n${clean}\n${fence}\n`;
   }
@@ -971,30 +973,30 @@ class SidebarUI {
     }
 
     // Add text blocks that aren't already captured in sections/articles
-    // Dedupe using hash of first 200 chars to reduce memory on large pages
+    // Dedupe using first 200 chars as key (prefix-based, not a hash) to reduce memory on large pages
     if (this.data.textBlocks && this.data.textBlocks.length > 0) {
-      const hashKey = (text) => (text || '').trim().slice(0, 200);
+      const prefixKey = (text) => (text || '').trim().slice(0, 200);
 
-      // Collect hashes of text already included from sections/articles
-      const includedHashes = new Set();
+      // Collect prefixes of text already included from sections/articles
+      const includedPrefixes = new Set();
       if (this.data.structure.sections) {
         for (const section of this.data.structure.sections) {
-          if (section.text) includedHashes.add(hashKey(section.text));
+          if (section.text) includedPrefixes.add(prefixKey(section.text));
           if (section.articles) {
             for (const article of section.articles) {
-              if (article.text) includedHashes.add(hashKey(article.text));
+              if (article.text) includedPrefixes.add(prefixKey(article.text));
             }
           }
         }
       }
 
       // Filter to additional text blocks not already included
-      const seenHashes = new Set();
+      const seenPrefixes = new Set();
       const additionalBlocks = this.data.textBlocks.filter(block => {
-        const key = hashKey(block.text);
+        const key = prefixKey(block.text);
         if (!key) return false;
-        if (includedHashes.has(key) || seenHashes.has(key)) return false;
-        seenHashes.add(key);
+        if (includedPrefixes.has(key) || seenPrefixes.has(key)) return false;
+        seenPrefixes.add(key);
         return true;
       });
 

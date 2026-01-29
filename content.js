@@ -383,12 +383,13 @@ class PageScope {
 
     // Queue-based shadow DOM traversal to collect all elements including shadow roots
     // This ensures text extraction works even when libraries fail or shadow roots exist
+    // Use index-based iteration to avoid O(n) shift() performance penalty
     const allElements = [];
     const queue = [document.body];
     const visited = new WeakSet();
 
-    while (queue.length > 0) {
-      const node = queue.shift();
+    for (let i = 0; i < queue.length; i++) {
+      const node = queue[i];
       if (!node || visited.has(node)) continue;
       visited.add(node);
 
@@ -2076,15 +2077,25 @@ browser.runtime.onMessage.addListener(pageScope.messageListener);
 
 // Ensure cleanup runs only once regardless of which event fires
 let pageScopeCleanedUp = false;
-function handlePageScopeCleanup() {
+function handlePageScopeCleanup(event) {
   if (pageScopeCleanedUp) return;
+
+  // Skip cleanup on bfcache (persisted pagehide) - page will be restored
+  if (event?.type === 'pagehide' && event.persisted) {
+    console.log('PageScope: skipping cleanup for bfcache');
+    return;
+  }
+
   pageScopeCleanedUp = true;
   console.log('PageScope: cleaning up to prevent memory leaks');
   pageScope.cleanup();
+
+  // Reset initialization flag so reinjection works after true unload
+  window.__pageScopeInitialized = false;
 }
 
 // Cleanup on page navigation/unload
-window.addEventListener('pagehide', handlePageScopeCleanup, { once: true, capture: true });
+window.addEventListener('pagehide', handlePageScopeCleanup, { capture: true });
 window.addEventListener('beforeunload', handlePageScopeCleanup, { once: true });
 
 function highlightElements(elementIds) {

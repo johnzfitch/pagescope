@@ -2,7 +2,7 @@
 
 Privacy-first Firefox extension for inspecting page structure, landmarks, and interactive elements. All analysis is performed locally in the browser. No telemetry. No external network requests.
 
-Version: v0.0.5
+Version: v0.0.6
 
 ## What it does
 
@@ -17,7 +17,7 @@ Version: v0.0.5
 1. Open `about:addons`
 2. Click the gear icon
 3. Choose "Install Add-on From File..."
-4. Select `dist/pagescope-v0.0.5.xpi` (or the newest file in `dist/`)
+4. Select `dist/pagescope-v0.0.6.xpi` (or the newest file in `dist/`)
 
 ### Load from source (development)
 
@@ -42,7 +42,6 @@ Version: v0.0.5
 ## Permissions (why they exist)
 
 - `activeTab`: access the active tab when you interact with the extension
-- `tabs`: read active tab metadata needed for UI and messaging
 - `storage`: store local preferences
 - `scripting`: inject scripts on demand on supported pages
 - `host_permissions: ["<all_urls>"]`: required to support inspecting arbitrary sites
@@ -56,7 +55,7 @@ web-ext lint
 ./build.sh
 ```
 
-Build output: `dist/pagescope-v0.0.5.xpi`
+Build output: `dist/pagescope-v0.0.6.xpi`
 
 ## Repository layout
 
@@ -65,11 +64,11 @@ Build output: `dist/pagescope-v0.0.5.xpi`
 ├── manifest.json
 ├── background.js
 ├── content.js
-├── vendor/
 ├── sidebar/
 ├── popup/
 ├── options/
-└── icons/
+├── icons/
+└── test/
 ```
 
 ## License

@@ -26,8 +26,22 @@ sleep 1
 echo "   ✓ Navigated to example.com"
 echo ""
 
+# Inject content script (since it's no longer auto-injected)
+echo "2. Injecting content script programmatically..."
+node test/scripts/test-extension.mjs bg "
+  browser.tabs.query({active: true, currentWindow: true}).then(tabs => {
+    return browser.scripting.executeScript({
+      target: { tabId: tabs[0].id },
+      files: ['/content.js']
+    });
+  })
+" >/dev/null 2>&1
+sleep 0.5
+echo "   ✓ Content script injected"
+echo ""
+
 # Test 1: Duplicate injection guard
-echo "2. Testing duplicate injection guard..."
+echo "3. Testing duplicate injection guard..."
 INITIALIZED=$(node test/scripts/interact.mjs exec "window.__pageScopeInitialized" 2>/dev/null || echo "undefined")
 if [ "$INITIALIZED" = "true" ]; then
   echo "   ✓ Content script initialized once"
@@ -37,7 +51,7 @@ fi
 echo ""
 
 # Test 2: Ping handler
-echo "3. Testing ping handler..."
+echo "4. Testing ping handler..."
 PING_RESULT=$(node test/scripts/interact.mjs exec "
   new Promise((resolve) => {
     browser.runtime.sendMessage({ action: 'ping' }, (response) => {
@@ -54,8 +68,9 @@ fi
 echo ""
 
 # Test 3: Extension UUID retrieval
-echo "4. Getting extension UUID..."
-UUID=$(node test/scripts/test-extension.mjs uuid 2>&1 | grep -v "^1769" | tail -1)
+echo "5. Getting extension UUID..."
+# Extract UUID (filter out Marionette noise by looking for UUID pattern)
+UUID=$(node test/scripts/test-extension.mjs uuid 2>&1 | grep -Eio '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 if [ -n "$UUID" ]; then
   echo "   ✓ UUID: $UUID"
 else
@@ -66,7 +81,7 @@ echo ""
 
 # Test 4: Sidebar load
 if [ -n "$UUID" ]; then
-  echo "5. Testing sidebar load..."
+  echo "6. Testing sidebar load..."
   node test/scripts/interact.mjs navigate "moz-extension://$UUID/sidebar/sidebar.html" >/dev/null 2>&1
   sleep 1
 
@@ -87,7 +102,7 @@ if [ -n "$UUID" ]; then
   echo ""
 
   # Test 5: Take screenshot
-  echo "6. Taking screenshots..."
+  echo "7. Taking screenshots..."
   node test/scripts/interact.mjs screenshot test/sidebar-empty.png >/dev/null 2>&1
   if [ -f "test/sidebar-empty.png" ]; then
     SIZE=$(du -h test/sidebar-empty.png | cut -f1)
@@ -96,13 +111,14 @@ if [ -n "$UUID" ]; then
     echo "   ✗ Screenshot failed"
   fi
 else
-  echo "5-6. Skipped (no UUID)"
+  echo "6-7. Skipped (no UUID)"
 fi
 echo ""
 
 # Test 6: Storage access
-echo "7. Testing browser storage access..."
-STORAGE=$(node test/scripts/test-extension.mjs storage 2>&1 | grep -v "^1769" || echo "{}")
+echo "8. Testing browser storage access..."
+# Filter for JSON output (starts with {)
+STORAGE=$(node test/scripts/test-extension.mjs storage 2>&1 | grep '^{' || echo "{}")
 if [[ "$STORAGE" == *"{"* ]]; then
   echo "   ✓ Storage accessible"
 else

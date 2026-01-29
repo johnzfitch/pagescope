@@ -42,11 +42,17 @@ async function runTests() {
     // Test 4: Trigger extraction
     console.log('Test 4: Click Load button to extract page data');
 
+    // NOTE: This test opens the sidebar as a tab (via openExtensionPage), not via
+    // browser.sidebarAction. When opened this way, the sidebar becomes the active tab,
+    // so clicking Load extracts from the sidebar page itself (not a content page).
+    // This verifies the UI works, but doesn't test real extraction from content pages.
+    // For full extraction testing, use verify-fixes.sh which injects content.js directly.
+
     // Navigate back to test page in main window
     await test.navigate('https://example.com');
     await new Promise(r => setTimeout(r, 500));
 
-    // Switch back to sidebar
+    // Switch back to sidebar (becomes active tab)
     await test.openExtensionPage('sidebar/sidebar.html');
     await new Promise(r => setTimeout(r, 500));
 
@@ -57,12 +63,12 @@ async function runTests() {
     // Wait for extraction
     await new Promise(r => setTimeout(r, 2000));
 
-    // Check if data loaded
+    // Check if data loaded (may or may not have structure items depending on sidebar content)
     const hasStructure = await test.exec(`
       !!document.querySelector('#structure-tab .item')
     `);
     console.log(`  Data extracted: ${hasStructure}`);
-    console.log('  ✓ Extraction triggered\n');
+    console.log('  ✓ Extraction triggered (UI responsive)\n');
 
     // Test 5: Verify structure data
     console.log('Test 5: Verify extracted structure');
@@ -95,7 +101,8 @@ async function runTests() {
 
     // Test 8: Screenshot result
     console.log('Test 8: Take screenshot');
-    await test.screenshot('/home/zack/dev/pagescope-extension/test/pagescope-test.png');
+    // Use relative path from repo root
+    await test.screenshot('test/pagescope-test.png');
     console.log('  ✓ Screenshot saved to test/pagescope-test.png\n');
 
     // Test 9: Check browser storage

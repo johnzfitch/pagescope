@@ -28,7 +28,7 @@ Debug and validate v0.0.6 fixes work correctly across different websites and sce
 
 ### Core Extension Files
 ```
-/home/zack/dev/pagescope-extension/
+<repo-root>/
 ├── manifest.json           # MV3 manifest, permissions, scripts
 ├── background.js           # Toolbar button handler, sidebar toggle
 ├── content.js             # Main extraction logic (2132 lines)
@@ -141,7 +141,7 @@ browser.tabs.sendMessage(tabId, { action: 'ping' })
 ### Quick Start (GUI Mode)
 
 ```bash
-cd /home/zack/dev/pagescope-extension
+cd <repo-root>
 
 # Terminal 1: Launch Firefox with extension
 ./test/quick-test.sh
@@ -455,7 +455,7 @@ node test/scripts/interact.mjs exec "
 - Tools: nc (netcat), realpath, zip
 
 **Paths:**
-- Project: `/home/zack/dev/pagescope-extension`
+- Project: `<repo-root>`
 - Build output: `dist/pagescope-v0.0.6.xpi`
 - Test temp: `/tmp/tmp.*` (created by launch.sh)
 
@@ -468,7 +468,7 @@ node test/scripts/interact.mjs exec "
 
 ### Build XPI
 ```bash
-cd /home/zack/dev/pagescope-extension
+cd <repo-root>
 bash build.sh
 # Output: dist/pagescope-v0.0.6.xpi (42KB)
 ```

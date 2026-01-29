@@ -175,27 +175,28 @@ export class Marionette {
       const id = this.msgId++;
       const msg = [0, id, command, params];
       const json = JSON.stringify(msg);
-      const frame = `${json.length}:${json}`;
+      // Use Buffer.byteLength for correct byte count with non-ASCII characters
+      const frame = `${Buffer.byteLength(json, 'utf8')}:${json}`;
 
-      let responseData = '';
+      let responseData = Buffer.alloc(0);
 
       const onData = (chunk) => {
-        responseData += chunk.toString();
-        
+        responseData = Buffer.concat([responseData, chunk]);
+
         // Try to parse complete response
-        const colonIdx = responseData.indexOf(':');
+        const colonIdx = responseData.indexOf(':'.charCodeAt(0));
         if (colonIdx === -1) return;
-        
-        const len = parseInt(responseData.slice(0, colonIdx), 10);
+
+        const len = parseInt(responseData.slice(0, colonIdx).toString(), 10);
         const expectedEnd = colonIdx + 1 + len;
-        
+
         if (responseData.length >= expectedEnd) {
           this.socket.removeListener('data', onData);
-          
-          const json = responseData.slice(colonIdx + 1, expectedEnd);
+
+          const json = responseData.slice(colonIdx + 1, expectedEnd).toString('utf8');
           try {
-            const [type, msgId, error, result] = JSON.parse(json);
-            
+            const [, , error, result] = JSON.parse(json);
+
             if (error) {
               reject(new Error(`${error.error}: ${error.message}`));
             } else {
