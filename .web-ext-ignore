@@ -1,27 +1,12 @@
-# Development and test files
-*.har
-*.log
-diagram-sample.txt
-screenshot-diagram.png
-screenshot.png
-pagescope-digg--s-2025-12-09.txt
-pagescope-s-2025-12-09.txt
-pagescope-s-2025-12-09(1).txt
-pagescope-text-children-who-spend-a-significant-amount-of-time-on-2025-12-09(1).txt
-console-export.log
-1.har
-digg-comment-page.har
+# Development artifacts
+aistudio-test.js
+aistudio-test2.js
+build.sh
+digg-test.html
+pagescope-dom-test.txt
+test.html
 
-# MCP server (optional feature - can be separate extension or download)
-mcp
-mcp-server
-
-# Development files
-.git
-.gitignore
-node_modules
-PRIVACY.md
-
-# OS files
-.DS_Store
-Thumbs.db
+# Build/output directories
+dist/
+pyghidra_mcp_projects/
+web-ext-artifacts/

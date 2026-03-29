@@ -44,3 +44,7 @@ Thumbs.db
 # Node
 node_modules/
 package-lock.json
+test/*.png
+
+# sentinel auto-managed
+dist/

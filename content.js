@@ -3,7 +3,14 @@
  * Extracts semantic page structure and accessibility information
  * with anti-fingerprinting protections
  *
-* PRIVACY & STEALTH FEATURES:
+ * INJECTION MODEL:
+ * ----------------
+ * This script is injected programmatically via scripting.executeScript when
+ * the user clicks the toolbar button or sidebar "Load" button. It is NOT
+ * auto-loaded via content_scripts to minimize overhead on pages where the
+ * extension is not used.
+ *
+ * PRIVACY & STEALTH FEATURES:
  * ---------------------------
  * PageScope implements several protections against site-based detection:
  *
@@ -13,12 +20,6 @@
  * 4. Batch Processing: Throttles operations to appear more human-like
  * 5. Read-Only Operations: Never modifies DOM (except temporary highlights)
  *
- * IMPORTANT PERFORMANCE NOTE:
- * - Stealth features are ONLY active during extraction (user-triggered)
- * - Extension is completely dormant until user clicks "Analyze"
- * - No background processes, no continuous monitoring, no overhead
- * - Query cache auto-expires after 100ms to prevent memory accumulation
- *
  * NOTE: We do NOT access the browser's accessibility tree (AXTree) - we only
  * read standard DOM attributes and properties. Sites cannot detect us via
  * assistive technology APIs. The "Braille map" is generated purely from:
@@ -27,6 +28,12 @@
  * - Computed styles (getComputedStyle)
  * No AXTree access = No assistive tech fingerprinting
  */
+
+// Guard against duplicate injection - only initialize once per page
+if (window.__pageScopeInitialized) {
+  console.log('PageScope already initialized, skipping duplicate injection');
+} else {
+  window.__pageScopeInitialized = true;
 
 class PageScope {
   constructor() {
@@ -182,6 +189,7 @@ class PageScope {
       if (!this.isVisible(el)) return;
 
       const textContent = this.getDirectText(el);
+      const codeBlocks = this.extractCodeBlocks(el);
 
       const section = {
         type: 'section',
@@ -190,6 +198,7 @@ class PageScope {
         path: this.getPath(el),
         wordCount: (el.textContent.match(/\w+/g) || []).length,
         text: textContent,
+        codeBlocks: codeBlocks.length > 0 ? codeBlocks : undefined,
         articles: [] // Children
       };
 
@@ -202,13 +211,15 @@ class PageScope {
       if (!this.isVisible(el)) return;
 
       const textContent = this.getDirectText(el);
+      const codeBlocks = this.extractCodeBlocks(el);
 
       const article = {
         heading: el.querySelector('h1,h2,h3')?.textContent?.trim(),
         id: el.id,
         path: this.getPath(el),
         wordCount: (el.textContent.match(/\w+/g) || []).length,
-        text: textContent
+        text: textContent,
+        codeBlocks: codeBlocks.length > 0 ? codeBlocks : undefined
       };
 
       // Find parent section
@@ -370,56 +381,36 @@ class PageScope {
       }
     });
 
-    // Iteratively collect all elements including those in shadow DOM
-    // Uses queue-based traversal to avoid stack overflow on deep DOM trees
-    // STEALTH: Use try-catch to silently handle blocked shadow roots
-    const collectAllElementsDeep = (root = document.body) => {
-      const allElements = [];
-      const queue = [];
+    // Queue-based shadow DOM traversal to collect all elements including shadow roots
+    // This ensures text extraction works even when libraries fail or shadow roots exist
+    // Use index-based iteration to avoid O(n) shift() performance penalty
+    const allElements = [];
+    const queue = [document.body];
+    const visited = new WeakSet();
 
-      // Seed queue with root's shadow root children (if accessible)
-      try {
-        if (root.shadowRoot) {
-          const shadowNodes = root.shadowRoot.querySelectorAll('*');
-          for (let i = 0; i < shadowNodes.length; i++) {
-            queue.push(shadowNodes[i]);
+    for (let i = 0; i < queue.length; i++) {
+      const node = queue[i];
+      if (!node || visited.has(node)) continue;
+      visited.add(node);
+
+      // Add this element
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        allElements.push(node);
+
+        // Descend into open shadow roots
+        if (node.shadowRoot) {
+          // Add shadow root children to queue
+          for (const child of node.shadowRoot.children) {
+            queue.push(child);
           }
         }
-      } catch (e) {
-        // Silently skip inaccessible shadow roots
-      }
 
-      // Add all direct descendants of root
-      const rootNodes = root.querySelectorAll('*');
-      for (let i = 0; i < rootNodes.length; i++) {
-        queue.push(rootNodes[i]);
-      }
-
-      // Process queue iteratively (no recursion = no stack overflow)
-      while (queue.length > 0) {
-        const el = queue.shift();
-        allElements.push(el);
-
-        // STEALTH: Shadow root access detection mitigation
-        // Check if shadow root exists without throwing errors
-        try {
-          if (el.shadowRoot) {
-            const shadowNodes = el.shadowRoot.querySelectorAll('*');
-            for (let i = 0; i < shadowNodes.length; i++) {
-              queue.push(shadowNodes[i]);
-            }
-          }
-        } catch (e) {
-          // Silently skip closed shadow roots or access-denied scenarios
-          // This prevents sites from detecting us via error handling
+        // Add regular children to queue
+        for (const child of node.children) {
+          queue.push(child);
         }
       }
-
-      return allElements;
-    };
-
-    // Collect all elements including shadow DOM
-    const allElements = collectAllElementsDeep();
+    }
 
     // Filter to text-bearing elements
     const textElements = allElements.filter(el => {
@@ -918,22 +909,66 @@ class PageScope {
   }
 
   getDirectText(el) {
-    // Get text content excluding nested sections/articles to avoid duplication
-    const clone = el.cloneNode(true);
+    // Use TreeWalker for single-pass text extraction without cloning
+    // Excludes nested sections/articles, scripts, styles, and pre blocks
+    const excludeSelector = 'section, article, script, style, noscript, pre';
+    const parts = [];
 
-    // Remove nested sections and articles
-    clone.querySelectorAll('section, article').forEach(nested => nested.remove());
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        // Skip if inside excluded elements
+        if (node.parentElement?.closest(excludeSelector) &&
+            node.parentElement.closest(excludeSelector) !== el) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
 
-    // Remove script and style tags
-    clone.querySelectorAll('script, style, noscript').forEach(tag => tag.remove());
+    while (walker.nextNode()) {
+      const text = walker.currentNode.textContent;
+      if (text && text.trim()) {
+        parts.push(text);
+      }
+    }
 
-    // Get cleaned text
-    let text = clone.textContent || '';
+    // Join with space and clean up
+    return parts.join(' ')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 
-    // Clean up whitespace
-    text = text.replace(/\s+/g, ' ').trim();
+  extractCodeBlocks(el, maxBlocks = 3) {
+    const blocks = [];
+    const seen = new Set();
 
-    return text;
+    // Scan pre elements directly, skip any nested inside section/article children
+    el.querySelectorAll('pre').forEach(pre => {
+      if (blocks.length >= maxBlocks) return;
+
+      // Skip if this pre is inside a nested section/article (not el itself)
+      const nestedContainer = pre.closest('section, article');
+      if (nestedContainer && nestedContainer !== el) return;
+
+      const codeEl = pre.querySelector('code');
+      const className = `${pre.className || ''} ${codeEl?.className || ''}`;
+      const language = className.match(/language-([a-z0-9_+-]+)/i)?.[1] || null;
+
+      let code = (pre.textContent || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+      if (!code || code.length < 10) return;
+
+      const key = code.slice(0, 200);
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      // Keep blocks bounded for export size; preserve newlines inside the block.
+      if (code.length > 4000) code = `${code.slice(0, 4000)}\n…`;
+
+      blocks.push({ language, code });
+    });
+
+    return blocks;
   }
 
   /**
@@ -1148,7 +1183,8 @@ class PageScope {
     }
 
     // aria-label
-    if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
+    const ariaLabel = el.getAttribute('aria-label');
+    if (ariaLabel) return ariaLabel.trim().slice(0, 100);
 
     // For inputs, check associated label
     if (el.labels?.length) {
@@ -1161,6 +1197,24 @@ class PageScope {
     // title attribute
     if (el.title) return el.title;
 
+    // For landmark-like containers, try to infer a name from an inner heading.
+    // Many pages visually label landmarks with a section heading rather than aria-label.
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    const isLandmarkTag = ['HEADER', 'NAV', 'MAIN', 'ASIDE', 'FOOTER', 'SECTION', 'ARTICLE'].includes(el.tagName);
+    const isLandmarkRole = /^(banner|navigation|main|complementary|contentinfo|region|search|form)$/.test(role);
+    if (isLandmarkTag || isLandmarkRole) {
+      const heading = el.querySelector('h1, h2, h3, h4, h5, h6');
+      const headingText = heading?.textContent?.replace(/\s+/g, ' ').trim();
+      if (headingText) return headingText.slice(0, 100);
+
+      // Navigation often has no heading; use the first non-empty link as a hint.
+      if (el.tagName === 'NAV' || role === 'navigation') {
+        const firstLink = el.querySelector('a');
+        const linkText = firstLink?.textContent?.replace(/\s+/g, ' ').trim();
+        if (linkText) return `Nav: ${linkText.slice(0, 30)}...`;
+      }
+    }
+
     // For buttons/links, use text content
     if (['BUTTON', 'A', 'SUMMARY'].includes(el.tagName)) {
       const text = el.textContent.trim();
@@ -1169,6 +1223,12 @@ class PageScope {
 
     // placeholder for inputs (fallback, not ideal)
     if (el.placeholder) return `[placeholder: ${el.placeholder}]`;
+
+    // Last resort: stable identifiers (useful for unlabeled landmarks)
+    if (el.id) return `#${el.id}`;
+    const meaningfulClass = Array.from(el.classList || [])
+      .find(c => c.length > 2 && !/^(ng-|js-|css-|_|sc-)/.test(c));
+    if (meaningfulClass) return `.${meaningfulClass}`;
 
     return null;
   }
@@ -1971,7 +2031,11 @@ console.log('PageScope content script loaded');
 
 // Create message listener with proper reference for cleanup
 pageScope.messageListener = (message, sender, sendResponse) => {
-  console.log('PageScope received message:', message);
+  // Ping handler for injection check
+  if (message.action === 'ping') {
+    sendResponse({ status: 'ready' });
+    return true;
+  }
 
   if (message.action === 'extract') {
     try {
@@ -1983,7 +2047,6 @@ pageScope.messageListener = (message, sender, sendResponse) => {
       // Pass through extraction options (e.g., brailleResolution)
       const options = message.options || {};
       const data = pageScope.extract(options);
-      console.log('PageScope extracted data:', data);
       sendResponse(data);
       return true; // Keep message channel open
     } catch (error) {
@@ -2014,15 +2077,25 @@ browser.runtime.onMessage.addListener(pageScope.messageListener);
 
 // Ensure cleanup runs only once regardless of which event fires
 let pageScopeCleanedUp = false;
-function handlePageScopeCleanup() {
+function handlePageScopeCleanup(event) {
   if (pageScopeCleanedUp) return;
+
+  // Skip cleanup on bfcache (persisted pagehide) - page will be restored
+  if (event?.type === 'pagehide' && event.persisted) {
+    console.log('PageScope: skipping cleanup for bfcache');
+    return;
+  }
+
   pageScopeCleanedUp = true;
   console.log('PageScope: cleaning up to prevent memory leaks');
   pageScope.cleanup();
+
+  // Reset initialization flag so reinjection works after true unload
+  window.__pageScopeInitialized = false;
 }
 
 // Cleanup on page navigation/unload
-window.addEventListener('pagehide', handlePageScopeCleanup, { once: true, capture: true });
+window.addEventListener('pagehide', handlePageScopeCleanup, { capture: true });
 window.addEventListener('beforeunload', handlePageScopeCleanup, { once: true });
 
 function highlightElements(elementIds) {
@@ -2033,11 +2106,17 @@ function highlightElements(elementIds) {
   const selectors = 'a, button, input, select, textarea, [role="button"], [role="link"], [tabindex]:not([tabindex="-1"])';
   const elements = Array.from(document.querySelectorAll(selectors))
     .filter(el => pageScope.isVisible(el));
-  
-  elements.forEach((el, idx) => {
-    if (elementIds && !elementIds.includes(idx)) return;
-    
-    const rect = el.getBoundingClientRect();
+
+  // BATCH READS: Collect all rects first to avoid layout thrashing
+  const rects = [];
+  for (let idx = 0; idx < elements.length; idx++) {
+    if (elementIds && !elementIds.includes(idx)) continue;
+    rects.push({ idx, rect: elements[idx].getBoundingClientRect() });
+  }
+
+  // BATCH WRITES: Create and append overlays using DocumentFragment
+  const fragment = document.createDocumentFragment();
+  for (const { idx, rect } of rects) {
     const overlay = document.createElement('div');
     overlay.className = 'pagescope-highlight';
     overlay.textContent = idx;
@@ -2057,6 +2136,9 @@ function highlightElements(elementIds) {
       pointer-events: none;
       box-sizing: border-box;
     `;
-    document.body.appendChild(overlay);
-  });
+    fragment.appendChild(overlay);
+  }
+  document.body.appendChild(fragment);
 }
+
+} // End of duplicate injection guard
